@@ -1,0 +1,31 @@
+# ─── SENTINEL Backend Dependencies ────────────────────────────────────────────
+
+# ── Web Framework ──────────────────────────────────────────────────────────────
+fastapi==0.115.6          # High-performance async web framework
+uvicorn[standard]==0.32.1 # ASGI server with WebSocket support
+
+# ── Database ───────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.36        # ORM — type-safe, no raw SQL in business logic
+alembic==1.14.0           # Database migrations (future-proofing)
+
+# ── Authentication ─────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0  # JWT encode/decode
+passlib[bcrypt]==1.7.4            # Password hashing (bcrypt)
+python-multipart==0.0.20          # Required for OAuth2 form login
+
+# ── Data Validation ────────────────────────────────────────────────────────────
+pydantic==2.10.4          # Request/response validation (built into FastAPI)
+pydantic-settings==2.7.0  # Settings management from .env
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1      # Load .env file
+httpx==0.28.1             # Async HTTP client (for testing)
+faker==33.1.0             # Generate realistic seed data
+
+# ── Report Generation ──────────────────────────────────────────────────────────
+reportlab==4.2.5          # PDF generation (Phase 9 full usage)
+
+# ── Testing ────────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
