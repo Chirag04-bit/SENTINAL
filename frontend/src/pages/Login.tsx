@@ -58,6 +58,23 @@ export default function Login() {
     }
   };
 
+  const handleShortcutLogin = async (role: 'admin' | 'user') => {
+    setLoading(true);
+    const demoEmail = role === 'admin' ? 'admin@sentinel.ai' : 'user@sentinel.ai';
+    const demoPassword = 'Password@1234';
+    try {
+      const { user, access_token } = await authService.login({ email: demoEmail, password: demoPassword });
+      authLogin(user, access_token);
+      toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
+      navigate(role === 'admin' ? ROUTES.ADMIN_DASHBOARD : ROUTES.USER_DASHBOARD, { replace: true });
+    } catch (err) {
+      console.error(err);
+      toast.error('Shortcut login failed. Please enter credentials manually.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
       style={{ background: 'var(--bg-base)' }}>
@@ -183,12 +200,12 @@ export default function Login() {
 
           {/* Demo shortcuts */}
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => { toast.success('Entering Admin Dashboard'); navigate('/admin'); }}
+            <button onClick={() => handleShortcutLogin('admin')} disabled={loading}
               className="btn-ghost py-2.5 justify-center gap-2 border-danger/20 hover:bg-danger/5 hover:text-danger">
               <Zap className="w-3.5 h-3.5" />
               <span className="text-xs font-medium">Try as Admin</span>
             </button>
-            <button onClick={() => { toast.success('Entering User Dashboard'); navigate('/dashboard'); }}
+            <button onClick={() => handleShortcutLogin('user')} disabled={loading}
               className="btn-ghost py-2.5 justify-center gap-2 border-accent/20 hover:bg-accent/5 hover:text-accent">
               <Shield className="w-3.5 h-3.5" />
               <span className="text-xs font-medium">Try as User</span>
