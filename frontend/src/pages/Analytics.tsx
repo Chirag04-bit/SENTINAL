@@ -1,34 +1,55 @@
-import { useState } from 'react';
-import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
+import { useEffect, useState } from 'react';
 import PageWrapper from '../components/layout/PageWrapper';
-import { MOCK_ALERT_TREND, MOCK_RISK_DIST, MOCK_THREAT_TYPES, MOCK_HOURLY } from '../data/mockData';
+import { AlertTimelineChart, RiskDistributionChart, ThreatTypesChart, ActivityHeatmap } from '../components/charts';
+import { getAlertTrends, getRiskDistribution, getThreatTypes, getHourlyActivity } from '../services/analyticsService';
+import type { AlertTrendPoint, RiskDistribution, ThreatTypeCount, HourlyHeatmapPoint } from '../types';
 
 interface AnalyticsProps { role: 'user' | 'admin'; }
 
 type DateRange = '7d' | '30d' | '90d';
 
-const COLORS = ['#EF4444','#F97316','#F59E0B','#06B6D4','#4F46E5','#10B981'];
-
 export default function Analytics({ role }: AnalyticsProps) {
   const [range, setRange] = useState<DateRange>('30d');
+  const [trends, setTrends] = useState<AlertTrendPoint[]>([]);
+  const [riskDist, setRiskDist] = useState<RiskDistribution[]>([]);
+  const [threatTypes, setThreatTypes] = useState<ThreatTypeCount[]>([]);
+  const [hourlyActivity, setHourlyActivity] = useState<HourlyHeatmapPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      try {
+        const [trendRes, riskRes, threatRes, hourlyRes] = await Promise.all([
+          getAlertTrends(),
+          getRiskDistribution(),
+          getThreatTypes(),
+          getHourlyActivity(),
+        ]);
+        setTrends(trendRes);
+        setRiskDist(riskRes);
+        setThreatTypes(threatRes);
+        setHourlyActivity(hourlyRes);
+      } catch (err) {
+        console.error("Error loading analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAnalytics();
+  }, []);
+
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
-  const trendData = MOCK_ALERT_TREND.slice(-Math.min(days, MOCK_ALERT_TREND.length));
+  const trendData = trends.slice(-Math.min(days, trends.length));
 
-  // Hourly heatmap — last 7 days condensed
-  const hourlyMax = Math.max(...MOCK_HOURLY.map(h => h.value));
-  const HOURS     = Array.from({ length: 24 }, (_, i) => i);
-  const DAYS      = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-
-  const heatColor = (v: number) => {
-    const ratio = v / hourlyMax;
-    if (ratio < 0.2)  return 'rgba(16,185,129,0.15)';
-    if (ratio < 0.4)  return 'rgba(245,158,11,0.2)';
-    if (ratio < 0.7)  return 'rgba(249,115,22,0.35)';
-    return 'rgba(239,68,68,0.5)';
-  };
+  if (loading) {
+    return (
+      <PageWrapper role={role} title="Analytics" subtitle="Trends, patterns, and threat intelligence insights">
+        <div className="flex items-center justify-center h-96">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper role={role} title="Analytics" subtitle="Trends, patterns, and threat intelligence insights">
@@ -66,46 +87,16 @@ export default function Analytics({ role }: AnalyticsProps) {
           <div className="chart-card xl:col-span-2">
             <p className="chart-title">Alert Volume Over Time</p>
             <p className="chart-desc">Daily count of alerts by severity level. Spikes indicate threat surges.</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={trendData} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
-                <defs>
-                  {['critical','high','medium','low'].map((k, i) => {
-                    const c = ['#EF4444','#F97316','#F59E0B','#10B981'][i];
-                    return (
-                      <linearGradient key={k} id={`aGrad-${k}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={c} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={c} stopOpacity={0}   />
-                      </linearGradient>
-                    );
-                  })}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" dataKey="critical" stackId="1" name="Critical" stroke="#EF4444" fill="url(#aGrad-critical)" />
-                <Area type="monotone" dataKey="high"     stackId="1" name="High"     stroke="#F97316" fill="url(#aGrad-high)" />
-                <Area type="monotone" dataKey="medium"   stackId="1" name="Medium"   stroke="#F59E0B" fill="url(#aGrad-medium)" />
-                <Area type="monotone" dataKey="low"      stackId="1" name="Low"      stroke="#10B981" fill="url(#aGrad-low)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <AlertTimelineChart data={trendData} height={260} showLegend={true} />
           </div>
 
           {/* Risk distribution donut */}
           <div className="chart-card">
             <p className="chart-title">Risk Distribution</p>
             <p className="chart-desc">Proportion of users by risk level. Green = safe, red = critical.</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={MOCK_RISK_DIST} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
-                  {MOCK_RISK_DIST.map((entry, i) => <Cell key={i} fill={entry.color} strokeWidth={0} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <RiskDistributionChart data={riskDist} height={200} innerRadius={50} outerRadius={80} showLabels={true} />
             <div className="grid grid-cols-2 gap-2 mt-2">
-              {MOCK_RISK_DIST.map(d => (
+              {riskDist.map(d => (
                 <div key={d.name} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.02]">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
                   <span className="text-xs text-slate-300">{d.name}</span>
@@ -123,51 +114,14 @@ export default function Analytics({ role }: AnalyticsProps) {
           <div className="chart-card">
             <p className="chart-title">Top Threat Categories</p>
             <p className="chart-desc">Most common attack types. These tell you what to prioritize defending against.</p>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={MOCK_THREAT_TYPES} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={120} />
-                <Tooltip formatter={(v: any) => [`${v} alerts`, 'Count']} />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]}>
-                  {MOCK_THREAT_TYPES.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <ThreatTypesChart data={threatTypes} height={220} yAxisWidth={120} radius={[0, 6, 6, 0]} />
           </div>
 
           {/* Hourly heatmap */}
           <div className="chart-card">
             <p className="chart-title">Activity Heatmap — Hour × Day</p>
             <p className="chart-desc">When attacks peak. Red = high activity, green = low. Watch for 2–4 AM spikes.</p>
-            <div className="mt-3 overflow-x-auto">
-              <div className="flex gap-1 mb-1">
-                <div className="w-8" />
-                {HOURS.filter(h => h % 4 === 0).map(h => (
-                  <div key={h} className="text-[9px] text-slate-600 w-5 text-center">{h}h</div>
-                ))}
-              </div>
-              {DAYS.map(day => (
-                <div key={day} className="flex items-center gap-1 mb-1">
-                  <div className="text-[9px] text-slate-500 w-8 text-right pr-1">{day}</div>
-                  {HOURS.map(hour => {
-                    const point = MOCK_HOURLY.find(h => h.day === day && h.hour === hour);
-                    return (
-                      <div key={hour} title={`${day} ${hour}:00 — ${point?.value ?? 0} events`}
-                        className="w-5 h-5 rounded-sm transition-all hover:scale-125 cursor-pointer"
-                        style={{ background: heatColor(point?.value ?? 0) }} />
-                    );
-                  })}
-                </div>
-              ))}
-              <div className="flex items-center gap-2 mt-3">
-                <span className="text-[9px] text-slate-600">Low</span>
-                {['rgba(16,185,129,0.15)','rgba(245,158,11,0.2)','rgba(249,115,22,0.35)','rgba(239,68,68,0.5)'].map((c, i) => (
-                  <div key={i} className="w-4 h-4 rounded-sm" style={{ background: c }} />
-                ))}
-                <span className="text-[9px] text-slate-600">High</span>
-              </div>
-            </div>
+            <ActivityHeatmap data={hourlyActivity} />
           </div>
         </div>
 

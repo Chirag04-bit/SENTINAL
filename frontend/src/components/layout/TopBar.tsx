@@ -1,6 +1,7 @@
 import { Bell, Search, Shield, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { MOCK_NOTIFICATIONS } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
 
 interface TopBarProps {
   title: string;
@@ -9,6 +10,7 @@ interface TopBarProps {
 }
 
 export default function TopBar({ title, subtitle, role }: TopBarProps) {
+  const { user } = useAuth();
   const [showNotifs, setShowNotifs] = useState(false);
   const unread = MOCK_NOTIFICATIONS.filter(n => !n.isRead).length;
 
@@ -36,7 +38,7 @@ export default function TopBar({ title, subtitle, role }: TopBarProps) {
   };
 
   return (
-    <header className="flex items-center justify-between px-6 py-3 border-b border-white/5"
+    <header className="flex items-center justify-between px-6 py-3 border-b border-white/5 relative z-30"
       style={{ background: 'rgba(8,12,28,0.8)', backdropFilter: 'blur(12px)' }}
     >
       {/* Left — Title */}
@@ -116,7 +118,7 @@ export default function TopBar({ title, subtitle, role }: TopBarProps) {
             <Shield className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-medium text-white hidden sm:block">
-            {role === 'admin' ? 'Admin' : 'Aryan Sharma'}
+            {user?.name || (role === 'admin' ? 'Admin' : 'User')}
           </span>
           <ChevronDown className="w-3 h-3 text-slate-500" />
         </button>

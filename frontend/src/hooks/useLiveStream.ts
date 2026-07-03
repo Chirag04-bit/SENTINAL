@@ -1,14 +1,7 @@
-// ─── useLiveStream ────────────────────────────────────────────────────────────
-// Simulates a real-time event stream.
-// Phase 7: Replace the interval with a WebSocket connection to the backend.
-//
-// Usage:
-//   const { events, eventsPerMin } = useLiveStream();
-
 import { useState, useEffect, useRef } from 'react';
-import { generateLiveEvent, MOCK_EVENTS } from '../data/mockData';
 import type { SentinelEvent } from '../types';
-import { LIVE_STREAM_INTERVAL_MS, LIVE_FEED_MAX_ROWS } from '../utils/constants';
+import { get } from '../services/api';
+import { LIVE_STREAM_INTERVAL_MS } from '../utils/constants';
 
 interface LiveStreamResult {
   events:       SentinelEvent[];
@@ -16,20 +9,52 @@ interface LiveStreamResult {
   isConnected:  boolean;
 }
 
+const mapEvent = (e: any): SentinelEvent => ({
+  id: e.id,
+  userId: e.user_id,
+  userName: e.user_name || 'System User',
+  type: e.type,
+  source: e.raw_features ? (JSON.parse(e.raw_features).source || 'web') : 'web',
+  amount: e.amount,
+  ipAddress: e.ip_address || '127.0.0.1',
+  device: e.device || 'Browser',
+  location: e.location || 'Unknown Location',
+  country: e.location ? e.location.split(', ').pop() || 'India' : 'India',
+  countryCode: 'IN',
+  latitude: 19.076,
+  longitude: 72.877,
+  timestamp: e.timestamp,
+  status: e.risk_score > 60 ? 'flagged' : e.risk_score > 30 ? 'suspicious' : 'normal',
+  riskScore: e.risk_score
+});
+
 export function useLiveStream(initialCount = 12): LiveStreamResult {
-  const [events, setEvents]           = useState<SentinelEvent[]>(
-    () => MOCK_EVENTS.slice(0, initialCount),
-  );
+  const [events, setEvents]           = useState<SentinelEvent[]>([]);
   const [eventsPerMin, setEventsPerMin] = useState(14);
-  const [isConnected, setIsConnected]   = useState(true);
+  const [isConnected, setIsConnected]   = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    setIsConnected(true);
+  const fetchEvents = async () => {
+    try {
+      const res = await get<any>('/events/', { page: 1, limit: initialCount });
+      if (res && res.data) {
+        setEvents((res.data || []).map(mapEvent));
+        setIsConnected(true);
+      }
+    } catch (err) {
+      console.error("Error polling events stream: ", err);
+      setIsConnected(false);
+    }
+  };
 
+  useEffect(() => {
+    // Initial fetch
+    fetchEvents();
+
+    // Set polling interval
     intervalRef.current = setInterval(() => {
-      const ev = generateLiveEvent();
-      setEvents(prev => [ev, ...prev.slice(0, LIVE_FEED_MAX_ROWS - 1)]);
+      fetchEvents();
+      // Add slight jitter to events per min
       setEventsPerMin(v => Math.max(5, Math.min(40, v + Math.floor(Math.random() * 5) - 2)));
     }, LIVE_STREAM_INTERVAL_MS);
 
@@ -37,7 +62,7 @@ export function useLiveStream(initialCount = 12): LiveStreamResult {
       if (intervalRef.current) clearInterval(intervalRef.current);
       setIsConnected(false);
     };
-  }, []);
+  }, [initialCount]);
 
   return { events, eventsPerMin, isConnected };
 }

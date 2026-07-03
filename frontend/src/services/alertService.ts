@@ -1,17 +1,5 @@
-// ─── SENTINEL Alert Service ───────────────────────────────────────────────────
-// All alert-related API calls.
-//
-// Phase 7 swap: Uncomment real API calls, remove mock returns.
-//
-// Endpoints (Phase 5):
-//   GET   /alerts             → Alert[]
-//   GET   /alerts/{id}        → Alert
-//   PATCH /alerts/{id}/resolve → Alert
-//   PATCH /alerts/{id}/dismiss → Alert
-
 import type { Alert, RiskLevel, AlertStatus, AlertType } from '../types';
-import { MOCK_ALERTS } from '../data/mockData';
-// import { get, patch } from './api';  ← Phase 7: uncomment
+import { get, patch } from './api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,69 +16,104 @@ export interface PaginatedAlerts {
   total: number;
   page:  number;
   pages: number;
+  open:  number;
+  critical: number;
 }
 
-// ─── Get all alerts ───────────────────────────────────────────────────────────
+// ─── Mapper ───────────────────────────────────────────────────────────────────
 
-/**
- * Fetches paginated, filtered alerts.
- * Phase 7: return get<PaginatedAlerts>('/alerts', filters);
- */
+export const mapAlert = (a: any): Alert => ({
+  id: a.id,
+  userId: a.user_id,
+  userName: a.user_name || 'Monitored User',
+  userEmail: a.user_email || '',
+  eventId: a.event_id || '',
+  title: a.title,
+  description: a.description || '',
+  type: a.type,
+  severity: a.severity as RiskLevel,
+  riskScore: a.risk_score,
+  confidenceScore: a.confidence_score || 91,
+  reasons: a.reasons || [a.description || 'Suspicious indicators detected.'],
+  recommendedAction: a.recommendation || 'No action required.',
+  status: a.status as AlertStatus,
+  timestamp: a.created_at,
+  resolvedAt: a.resolved_at || undefined,
+  ipAddress: a.ip_address || 'N/A',
+  device: a.device || 'N/A',
+  location: a.location || 'N/A',
+  country: a.location ? a.location.split(', ').pop() || 'IN' : 'IN',
+  amount: a.amount,
+  shapFactors: (a.shap_values || []).map((s: any) => ({
+    feature: s.feature || 'unknown',
+    label: s.factor || 'Factor',
+    value: s.contribution || 0,
+    displayValue: s.detail || (s.direction === 'positive' ? 'Increases risk' : 'Reduces risk')
+  }))
+});
+
+// ─── Get all alerts (Admin) ───────────────────────────────────────────────────
+
 export const getAlerts = async (
   filters: AlertFiltersDTO = {},
 ): Promise<PaginatedAlerts> => {
-  await new Promise(r => setTimeout(r, 300));
+  const params: any = {};
+  if (filters.severity && (filters.severity as any) !== 'all') params.severity = filters.severity;
+  if (filters.status && (filters.status as any) !== 'all') params.status = filters.status;
+  if (filters.type && (filters.type as any) !== 'all') params.type = filters.type;
+  params.page = filters.page ?? 1;
+  params.limit = filters.limit ?? 20;
 
-  let data = [...MOCK_ALERTS];
-  if (filters.severity) data = data.filter(a => a.severity === filters.severity);
-  if (filters.status)   data = data.filter(a => a.status   === filters.status);
-  if (filters.type)     data = data.filter(a => a.type     === filters.type);
-
-  const page  = filters.page  ?? 1;
-  const limit = filters.limit ?? 20;
-  const start = (page - 1) * limit;
-
+  const res = await get<any>('/alerts/', params);
   return {
-    data:  data.slice(start, start + limit),
-    total: data.length,
-    page,
-    pages: Math.ceil(data.length / limit),
+    data: (res.data || []).map(mapAlert),
+    total: res.total,
+    page: res.page,
+    pages: res.pages,
+    open: res.open || 0,
+    critical: res.critical || 0,
+  };
+};
+
+// ─── Get user alerts ──────────────────────────────────────────────────────────
+
+export const getMyAlerts = async (
+  filters: AlertFiltersDTO = {},
+): Promise<PaginatedAlerts> => {
+  const params: any = {};
+  params.page = filters.page ?? 1;
+  params.limit = filters.limit ?? 20;
+
+  const res = await get<any>('/alerts/my', params);
+  return {
+    data: (res.data || []).map(mapAlert),
+    total: res.total,
+    page: res.page,
+    pages: res.pages,
+    open: res.open || 0,
+    critical: res.critical || 0,
   };
 };
 
 // ─── Get single alert ─────────────────────────────────────────────────────────
 
-/**
- * Fetches a single alert by ID.
- * Phase 7: return get<Alert>(`/alerts/${id}`);
- */
 export const getAlertById = async (id: string): Promise<Alert | null> => {
-  await new Promise(r => setTimeout(r, 200));
-  return MOCK_ALERTS.find(a => a.id === id) ?? null;
+  try {
+    const res = await get<any>(`/alerts/${id}`);
+    return mapAlert(res);
+  } catch {
+    return null;
+  }
 };
 
 // ─── Resolve alert ────────────────────────────────────────────────────────────
 
-/**
- * Marks an alert as resolved.
- * Phase 7: return patch<Alert>(`/alerts/${id}/resolve`);
- */
-export const resolveAlert = async (id: string): Promise<Alert> => {
-  await new Promise(r => setTimeout(r, 400));
-  const alert = MOCK_ALERTS.find(a => a.id === id);
-  if (!alert) throw new Error(`Alert ${id} not found`);
-  return { ...alert, status: 'resolved', resolvedAt: new Date().toISOString() };
+export const resolveAlert = async (id: string): Promise<void> => {
+  await patch(`/alerts/${id}/resolve`);
 };
 
 // ─── Dismiss alert ────────────────────────────────────────────────────────────
 
-/**
- * Marks an alert as dismissed.
- * Phase 7: return patch<Alert>(`/alerts/${id}/dismiss`);
- */
-export const dismissAlert = async (id: string): Promise<Alert> => {
-  await new Promise(r => setTimeout(r, 300));
-  const alert = MOCK_ALERTS.find(a => a.id === id);
-  if (!alert) throw new Error(`Alert ${id} not found`);
-  return { ...alert, status: 'dismissed' };
+export const dismissAlert = async (id: string): Promise<void> => {
+  await patch(`/alerts/${id}/dismiss`);
 };

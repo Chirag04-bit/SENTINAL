@@ -17,7 +17,6 @@
 import { type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import Skeleton from '../ui/Skeleton';
 import { ROUTES } from '../../utils/constants';
 
 interface AuthGuardProps {

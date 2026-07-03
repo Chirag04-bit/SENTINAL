@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Shield, Bell, Palette, Lock, Eye, Save } from 'lucide-react';
 import PageWrapper from '../components/layout/PageWrapper';
+import { useAuth } from '../context/AuthContext';
+import { updateProfile } from '../services/userService';
 import toast from 'react-hot-toast';
 
 interface SettingsProps { role: 'user' | 'admin'; }
@@ -51,13 +53,23 @@ const PrivacyToggleRow = ({ label, desc }: { label: string; desc: string }) => {
 };
 
 export default function Settings({ role }: SettingsProps) {
+  const { user, token, login: updateAuthUser } = useAuth();
   const [tab, setTab]         = useState<Tab>('profile');
-  const [name, setName]       = useState('Aryan Sharma');
-  const [email, setEmail]     = useState('aryan.sharma@email.com');
+  const [name, setName]       = useState(user?.name || '');
+  const [email, setEmail]     = useState(user?.email || '');
   const [notifs, setNotifs]   = useState({ email: true, inApp: true, critical: true, weekly: false });
   const [darkMode, setDark]   = useState(true);
 
-  const save = () => toast.success('Settings saved successfully!');
+  const save = async () => {
+    try {
+      const updatedUser = await updateProfile({ name });
+      if (token) updateAuthUser(updatedUser, token);
+      toast.success('Settings saved successfully!');
+    } catch (err) {
+      toast.error('Failed to save changes.');
+      console.error(err);
+    }
+  };
 
   return (
     <PageWrapper role={role} title="Settings" subtitle="Manage your account, security, and preferences">

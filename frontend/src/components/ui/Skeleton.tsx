@@ -9,12 +9,14 @@
 
 interface SkeletonProps {
   className?: string;
+  style?: React.CSSProperties;
 }
 
-function SkeletonBase({ className = '' }: SkeletonProps) {
+function SkeletonBase({ className = '', style }: SkeletonProps) {
   return (
     <div
       className={`bg-white/5 rounded-lg animate-pulse ${className}`}
+      style={style}
       role="status"
       aria-label="Loading..."
     />

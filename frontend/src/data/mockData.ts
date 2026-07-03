@@ -10,7 +10,7 @@ import type {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600000).toISOString();
 const daysAgo  = (d: number) => new Date(Date.now() - d * 86400000).toISOString();
 

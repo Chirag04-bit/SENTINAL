@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Bell, BarChart3, FileText, Settings,
+  LayoutDashboard, BarChart3, FileText, Settings,
   LogOut, Shield, Users, Search, Radio, ChevronLeft, ChevronRight,
   AlertTriangle,
 } from 'lucide-react';

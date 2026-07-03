@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import type { Alert } from '../../types';
 import RiskBadge from './RiskBadge';
+import { resolveAlert, dismissAlert } from '../../services/alertService';
 import toast from 'react-hot-toast';
 
 interface AlertCardProps {
   alert: Alert;
   expanded?: boolean;
+  onResolve?: () => void;
+  onDismiss?: () => void;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -20,7 +23,7 @@ const SEVERITY_BORDER: Record<string, string> = {
   critical: 'border-l-danger',
 };
 
-export default function AlertCard({ alert, expanded: defaultExpanded = false }: AlertCardProps) {
+export default function AlertCard({ alert, expanded: defaultExpanded = false, onResolve, onDismiss }: AlertCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [status, setStatus]     = useState(alert.status);
 
@@ -33,13 +36,28 @@ export default function AlertCard({ alert, expanded: defaultExpanded = false }: 
     return `${Math.floor(h / 24)}d ago`;
   };
 
-  const resolve = () => {
-    setStatus('resolved');
-    toast.success('Alert marked as resolved');
+  const resolve = async () => {
+    try {
+      await resolveAlert(alert.id);
+      setStatus('resolved');
+      toast.success('Alert marked as resolved');
+      if (onResolve) onResolve();
+    } catch (err) {
+      toast.error('Failed to resolve alert');
+      console.error(err);
+    }
   };
-  const dismiss = () => {
-    setStatus('dismissed');
-    toast('Alert dismissed', { icon: '🗑️' });
+
+  const dismiss = async () => {
+    try {
+      await dismissAlert(alert.id);
+      setStatus('dismissed');
+      toast('Alert dismissed', { icon: '🗑️' });
+      if (onDismiss) onDismiss();
+    } catch (err) {
+      toast.error('Failed to dismiss alert');
+      console.error(err);
+    }
   };
 
   return (

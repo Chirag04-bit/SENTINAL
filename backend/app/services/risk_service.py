@@ -20,6 +20,8 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from app.config.settings import settings
+from app.services.ml_service import ml_service
 
 
 @dataclass
@@ -64,6 +66,45 @@ def calculate_risk(
     Returns:
         RiskResult with score, level, anomaly flag, XAI factors, and recommendation
     """
+    # ── ML Model Integration (Phase 7) ────────────────────────────────────────
+    if settings.USE_ML_MODEL and ml_service.models_loaded:
+        try:
+            if event_type in ("fraud", "transaction"):
+                ml_score, ml_level, ml_factors, ml_rec = ml_service.predict_fraud(
+                    amount=amount or 0.0,
+                    raw_features={"ip_address": ip_address, "location": location, "device": device}
+                )
+                return RiskResult(
+                    score=ml_score,
+                    level=ml_level,
+                    is_anomaly=ml_score > 60,
+                    factors=ml_factors,
+                    recommendation=ml_rec
+                )
+            elif event_type == "intrusion":
+                raw_feats = {
+                    "ip_address": ip_address,
+                    "location": location,
+                    "device": device,
+                    "protocol_type": "tcp",
+                    "flag": "SF",
+                    "service": "http",
+                    "src_bytes": 1200,
+                    "dst_bytes": 3400,
+                    "count": 1
+                }
+                ml_score, ml_level, ml_factors, ml_rec = ml_service.predict_intrusion(raw_feats)
+                return RiskResult(
+                    score=ml_score,
+                    level=ml_level,
+                    is_anomaly=ml_score > 60,
+                    factors=ml_factors,
+                    recommendation=ml_rec
+                )
+        except Exception as e:
+            # Fallback to rule-based engine if anything fails
+            pass
+
     score   = 0
     factors = []
     usual_locations = user_usual_locations or []

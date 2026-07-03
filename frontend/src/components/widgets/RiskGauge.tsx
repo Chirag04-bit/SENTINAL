@@ -24,7 +24,6 @@ export default function RiskGauge({ score, size = 'md', showLabel = true }: Risk
   const radius = (sz - sw) / 2;
   const circumference = Math.PI * radius; // half circle
   const offset = circumference - (score / 100) * circumference;
-  const cx = sz / 2;
   const cy = sz / 2;
 
   return (

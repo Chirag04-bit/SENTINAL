@@ -75,3 +75,12 @@ def get_me(current_user: User = Depends(get_current_user)):
     Response: UserResponse object
     """
     return UserResponse.model_validate(current_user)
+
+
+@router.post(
+    "/logout",
+    summary="User Logout",
+    description="Invalidate session on client side. Backend returns success.",
+)
+def logout():
+    return {"message": "Logged out successfully"}

@@ -60,7 +60,10 @@ class User(Base):
 
     # ── Relationships ─────────────────────────────────────────────────────────
     alerts: Mapped[list["Alert"]] = relationship(  # type: ignore[name-defined]
-        "Alert", back_populates="user", cascade="all, delete-orphan"
+        "Alert",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        primaryjoin="User.id == Alert.user_id",
     )
     events: Mapped[list["Event"]] = relationship(  # type: ignore[name-defined]
         "Event", back_populates="user", cascade="all, delete-orphan"

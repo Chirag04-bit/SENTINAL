@@ -1,30 +1,82 @@
-import { useState } from 'react';
-import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
+import { useEffect, useState } from 'react';
 import { Radio, Users, AlertTriangle, Shield, Activity, Brain, MapPin } from 'lucide-react';
 import PageWrapper from '../components/layout/PageWrapper';
 import StatCard from '../components/widgets/StatCard';
 import RiskBadge from '../components/widgets/RiskBadge';
+import { AlertTimelineChart, RiskDistributionChart, ThreatTypesChart } from '../components/charts';
 import { useLiveStream } from '../hooks/useLiveStream';
-import {
-  MOCK_STATS, MOCK_ALERTS, MOCK_EVENTS, MOCK_ALERT_TREND,
-  MOCK_RISK_DIST, MOCK_THREAT_TYPES,
-} from '../data/mockData';
-import { CHART_COLORS, SEVERITY_CHART_COLORS } from '../utils/constants';
-import { formatTime, getRiskLevel } from '../utils/formatters';
-import { EVENT_TYPE_LABELS } from '../utils/constants';
-
-
-const COLORS = { low: '#10B981', medium: '#F59E0B', high: '#F97316', critical: '#EF4444' };
+import { getAnalyticsSummary, getAlertTrends, getRiskDistribution, getThreatTypes } from '../services/analyticsService';
+import { getAlerts } from '../services/alertService';
+import { getUsers } from '../services/userService';
+import { get, post } from '../services/api';
+import type { DashboardStats, AlertTrendPoint, RiskDistribution, ThreatTypeCount, Alert, User } from '../types';
 
 export default function AdminDashboard() {
-  const { events: liveEvents, eventsPerMin, isConnected } = useLiveStream(12);
-  const [alertCount, setAlertCount] = useState(MOCK_STATS.totalAlerts);
+  const { events: liveEvents, eventsPerMin } = useLiveStream(12);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [trendData, setTrendData] = useState<AlertTrendPoint[]>([]);
+  const [riskDist, setRiskDist] = useState<RiskDistribution[]>([]);
+  const [threatTypes, setThreatTypes] = useState<ThreatTypeCount[]>([]);
+  const [monitoredUsers, setMonitoredUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  const [simulatorRunning, setSimulatorRunning] = useState(false);
+  const [simulatorLoading, setSimulatorLoading] = useState(false);
 
-  const recentAlerts = MOCK_ALERTS.filter(a => a.status === 'open').slice(0, 6);
+  const fetchSimulatorStatus = async () => {
+    try {
+      const res = await get<any>('/events/simulator/status');
+      setSimulatorRunning(res.is_running);
+    } catch (e) {
+      console.warn("Simulator status endpoint unavailable", e);
+    }
+  };
+
+  const toggleSimulator = async () => {
+    setSimulatorLoading(true);
+    try {
+      if (simulatorRunning) {
+        await post('/events/simulator/stop');
+        setSimulatorRunning(false);
+      } else {
+        await post('/events/simulator/start');
+        setSimulatorRunning(true);
+      }
+    } catch (err) {
+      console.error("Error toggling simulator:", err);
+    } finally {
+      setSimulatorLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        const [statsData, alertsData, trendRes, riskRes, threatRes, usersRes] = await Promise.all([
+          getAnalyticsSummary(),
+          getAlerts({ limit: 6, status: 'open' }),
+          getAlertTrends(),
+          getRiskDistribution(),
+          getThreatTypes(),
+          getUsers(1, 10),
+        ]);
+        setStats(statsData);
+        setAlerts(alertsData.data);
+        setTrendData(trendRes);
+        setRiskDist(riskRes);
+        setThreatTypes(threatRes);
+        setMonitoredUsers(usersRes.data);
+        await fetchSimulatorStatus();
+      } catch (err) {
+        console.error("Error loading SOC dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadDashboard();
+  }, []);
+
   const statusColor  = (s: string) =>
     s === 'flagged' ? 'text-danger' : s === 'suspicious' ? 'text-warning' : 'text-success';
   const typeLabel = (t: string) => ({ fraud:'💳 Fraud', intrusion:'🌐 Intrusion', login:'🔑 Login', transaction:'💰 Txn', system:'⚙️ System' }[t] || t);
@@ -34,9 +86,40 @@ export default function AdminDashboard() {
     return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  if (loading) {
+    return (
+      <PageWrapper role="admin" title="Security Operations Center" subtitle="Live threat monitoring & anomaly detection">
+        <div className="flex items-center justify-center h-96">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
   return (
     <PageWrapper role="admin" title="Security Operations Center" subtitle="Live threat monitoring & anomaly detection">
       <div className="page-content">
+
+        {/* ── SIMULATOR CONTROL BANNER ── */}
+        <div className="card-glow p-4 rounded-2xl flex items-center justify-between gap-4 mb-6 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span className={`w-3 h-3 rounded-full ${simulatorRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+            <div>
+              <h3 className="text-sm font-bold text-white mb-0.5">Real-Time ML Ingestion Stream (Real Data)</h3>
+              <p className="text-xs text-slate-400">Streams live transactions/packets from Kaggle & NSL-KDD through active RandomForest classifiers.</p>
+            </div>
+          </div>
+          <button 
+            disabled={simulatorLoading}
+            onClick={toggleSimulator}
+            className={`py-2 px-4 rounded-lg text-xs font-semibold transition-all border flex items-center gap-2
+              ${simulatorRunning 
+                ? 'bg-rose-950/20 text-rose-400 border-rose-500/30 hover:bg-rose-900/30' 
+                : 'bg-emerald-950/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/30'}`}
+          >
+            {simulatorLoading ? 'Updating...' : simulatorRunning ? 'Stop Simulator Stream' : 'Start Simulator Stream'}
+          </button>
+        </div>
 
         {/* ── STAT CARDS ── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -51,7 +134,7 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Total Users"
-            value={MOCK_STATS.totalUsers}
+            value={stats?.totalUsers ?? 0}
             icon={<Users className="w-5 h-5 text-primary-light" />}
             iconBg="bg-primary/15"
             trend={3}
@@ -59,7 +142,7 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Open Alerts"
-            value={alertCount}
+            value={stats?.openAlerts ?? 0}
             icon={<AlertTriangle className="w-5 h-5 text-danger" />}
             iconBg="bg-danger/15"
             variant="danger"
@@ -68,8 +151,8 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Safe Users"
-            value={`${MOCK_STATS.safeUsers}`}
-            subtitle={`${Math.round(MOCK_STATS.safeUsers / MOCK_STATS.totalUsers * 100)}% of total`}
+            value={`${stats?.safeUsers ?? 0}`}
+            subtitle={`${Math.round((stats?.safeUsers ?? 0) / (stats?.totalUsers || 1) * 100)}% of total`}
             icon={<Shield className="w-5 h-5 text-success" />}
             iconBg="bg-success/15"
             variant="success"
@@ -77,7 +160,7 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="System Health"
-            value={`${MOCK_STATS.systemHealth}%`}
+            value={`${stats?.systemHealth ?? 94}%`}
             icon={<Activity className="w-5 h-5 text-warning" />}
             iconBg="bg-warning/15"
             variant="warning"
@@ -85,7 +168,7 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Model Confidence"
-            value={`${MOCK_STATS.modelConfidence}%`}
+            value={`${stats?.modelConfidence ?? 91}%`}
             icon={<Brain className="w-5 h-5 text-secondary-light" />}
             iconBg="bg-secondary/15"
             description="How confident the AI model is in its current predictions."
@@ -151,26 +234,7 @@ export default function AdminDashboard() {
           <div className="xl:col-span-2 chart-card">
             <p className="chart-title">Alert Timeline — 30 Days</p>
             <p className="chart-desc">Daily alert volume by severity. Spikes indicate threat surges.</p>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={MOCK_ALERT_TREND.slice(-14)} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
-                <defs>
-                  {Object.entries(COLORS).map(([k, c]) => (
-                    <linearGradient key={k} id={`g-${k}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor={c} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={c} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Area type="monotone" dataKey="critical" stackId="1" stroke={COLORS.critical} fill={`url(#g-critical)`} />
-                <Area type="monotone" dataKey="high"     stackId="1" stroke={COLORS.high}     fill={`url(#g-high)`} />
-                <Area type="monotone" dataKey="medium"   stackId="1" stroke={COLORS.medium}   fill={`url(#g-medium)`} />
-                <Area type="monotone" dataKey="low"      stackId="1" stroke={COLORS.low}      fill={`url(#g-low)`} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <AlertTimelineChart data={trendData.slice(-14)} />
           </div>
         </div>
 
@@ -181,18 +245,9 @@ export default function AdminDashboard() {
           <div className="chart-card xl:col-span-1">
             <p className="chart-title">Risk Distribution</p>
             <p className="chart-desc">Users grouped by risk level. More green = safer system.</p>
-            <ResponsiveContainer width="100%" height={180}>
-              <PieChart>
-                <Pie data={MOCK_RISK_DIST} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3}>
-                  {MOCK_RISK_DIST.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} strokeWidth={0} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v, n) => [`${v} users`, n]} />
-              </PieChart>
-            </ResponsiveContainer>
+            <RiskDistributionChart data={riskDist} />
             <div className="grid grid-cols-2 gap-1.5 mt-2">
-              {MOCK_RISK_DIST.map(d => (
+              {riskDist.map(d => (
                 <div key={d.name} className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
                   <span className="text-[10px] text-slate-400">{d.name}: {d.value}</span>
@@ -205,19 +260,7 @@ export default function AdminDashboard() {
           <div className="chart-card xl:col-span-2">
             <p className="chart-title">Top Threat Types</p>
             <p className="chart-desc">Most common attack categories detected this month.</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={MOCK_THREAT_TYPES} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={110} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {MOCK_THREAT_TYPES.map((_, i) => (
-                    <Cell key={i} fill={['#EF4444','#F97316','#F59E0B','#06B6D4','#4F46E5','#10B981'][i]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <ThreatTypesChart data={threatTypes} />
           </div>
 
           {/* Recent Critical Alerts */}
@@ -232,19 +275,23 @@ export default function AdminDashboard() {
               </button>
             </div>
             <div className="space-y-2 max-h-[220px] overflow-y-auto no-scrollbar">
-              {recentAlerts.map(alert => (
-                <div key={alert.id} className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                      <span className="text-xs font-semibold text-white truncate">{alert.title}</span>
-                      <RiskBadge level={alert.severity} score={alert.riskScore} size="sm" />
+              {alerts.length === 0 ? (
+                <p className="text-xs text-slate-500 py-4 text-center">No open alerts.</p>
+              ) : (
+                alerts.map(alert => (
+                  <div key={alert.id} className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <span className="text-xs font-semibold text-white truncate">{alert.title}</span>
+                        <RiskBadge level={alert.severity} score={alert.riskScore} size="sm" />
+                      </div>
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                        <MapPin className="w-2.5 h-2.5" /> {alert.userName} · {alert.location}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                      <MapPin className="w-2.5 h-2.5" /> {alert.userName} · {alert.location}
-                    </p>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -278,32 +325,32 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {[...MOCK_EVENTS.reduce((acc, ev) => {
-                  if (!acc.has(ev.userId)) acc.set(ev.userId, ev);
-                  return acc;
-                }, new Map()).values()].slice(0, 10).map((ev: any, i) => {
-                  const user = { riskScore: ev.riskScore, riskLevel: ev.riskScore > 80 ? 'critical' : ev.riskScore > 60 ? 'high' : ev.riskScore > 30 ? 'medium' : 'low' };
-                  return (
+                {monitoredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center text-xs text-slate-500 py-6">No monitored users found.</td>
+                  </tr>
+                ) : (
+                  monitoredUsers.map((u, i) => (
                     <tr key={i} className="cursor-pointer">
-                      <td className="font-medium text-white">{ev.userName}</td>
-                      <td className="text-slate-500 font-mono text-[11px]">{ev.userName.toLowerCase().replace(' ', '.') + '@email.com'}</td>
+                      <td className="font-medium text-white">{u.name}</td>
+                      <td className="text-slate-500 font-mono text-[11px]">{u.email}</td>
                       <td>
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
                             <div className="h-full rounded-full transition-all"
-                              style={{ width:`${ev.riskScore}%`, background: ev.riskScore > 80 ? '#EF4444' : ev.riskScore > 60 ? '#F97316' : ev.riskScore > 30 ? '#F59E0B' : '#10B981' }} />
+                              style={{ width:`${u.riskScore}%`, background: u.riskScore > 80 ? '#EF4444' : u.riskScore > 60 ? '#F97316' : u.riskScore > 30 ? '#F59E0B' : '#10B981' }} />
                           </div>
-                          <span className="text-xs font-mono">{ev.riskScore}</span>
+                          <span className="text-xs font-mono">{u.riskScore}</span>
                         </div>
                       </td>
-                      <td><RiskBadge level={user.riskLevel as any} size="sm" /></td>
-                      <td className="text-slate-500 text-xs font-mono">{new Date(ev.timestamp).toLocaleDateString()}</td>
-                      <td className="text-xs text-slate-400">{ev.location}</td>
-                      <td className="text-xs font-semibold text-danger">{Math.floor(Math.random() * 5)}</td>
-                      <td><span className="badge badge-low text-[10px]">Active</span></td>
+                      <td><RiskBadge level={u.riskLevel} size="sm" /></td>
+                      <td className="text-slate-500 text-xs font-mono">{u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : 'Never'}</td>
+                      <td className="text-xs text-slate-400">{u.location || 'Unknown'}</td>
+                      <td className="text-xs font-semibold text-danger">{u.openAlerts}</td>
+                      <td><span className="badge badge-low text-[10px]">{u.isActive ? 'Active' : 'Inactive'}</span></td>
                     </tr>
-                  );
-                })}
+                  ))
+                )}
               </tbody>
             </table>
           </div>

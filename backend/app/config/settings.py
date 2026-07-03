@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     INTRUSION_MODEL_PATH: str  = "../ml/saved_models/intrusion_model.pkl"
 
     # ── Risk Score Engine ─────────────────────────────────────────────────────
-    USE_ML_MODEL: bool    = False   # Phase 6: set to True when models are ready
+    USE_ML_MODEL: bool    = True   # Phase 6: set to True when models are ready
 
 
 @lru_cache

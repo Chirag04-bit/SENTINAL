@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { FileText, Download, Printer, Calendar, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FileText, Download } from 'lucide-react';
 import PageWrapper from '../components/layout/PageWrapper';
-import { MOCK_REPORTS } from '../data/mockData';
+import { getReports, generateReport, downloadReportFile } from '../services/reportService';
+import type { Report } from '../types';
 import toast from 'react-hot-toast';
 
 interface ReportsProps { role: 'user' | 'admin'; }
@@ -13,15 +14,57 @@ export default function Reports({ role }: ReportsProps) {
   const [dateFrom, setFrom]   = useState('2026-06-01');
   const [dateTo, setTo]       = useState('2026-06-29');
   const [generating, setGen]  = useState(false);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadReports = async () => {
+    try {
+      const data = await getReports();
+      setReports(data);
+    } catch (err) {
+      console.error("Error loading reports:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadReports();
+  }, []);
 
   const generate = async () => {
     setGen(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setGen(false);
-    toast.success('Report generated! Ready for download.');
+    try {
+      await generateReport({ type, dateFrom, dateTo, format: 'pdf' });
+      toast.success('Report generated! Ready for download.');
+      await loadReports();
+    } catch (err) {
+      toast.error('Failed to generate report.');
+      console.error(err);
+    } finally {
+      setGen(false);
+    }
   };
 
-  const download = (fmt: string) => toast.success(`Downloading as ${fmt.toUpperCase()}...`);
+  const handleDownload = async (reportId: string, title: string, format: string) => {
+    try {
+      await downloadReportFile(reportId, title, format);
+      toast.success('Downloaded successfully!');
+    } catch (err) {
+      toast.error('Download failed.');
+      console.error(err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <PageWrapper role={role} title="Reports" subtitle="Generate, preview, and export security reports">
+        <div className="flex items-center justify-center h-96">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper role={role} title="Reports" subtitle="Generate, preview, and export security reports">
@@ -73,14 +116,8 @@ export default function Reports({ role }: ReportsProps) {
                 )}
               </button>
               <div className="flex gap-2">
-                <button onClick={() => download('pdf')} className="btn-ghost btn-sm flex-1 justify-center gap-1">
-                  <Download className="w-3.5 h-3.5" /> PDF
-                </button>
-                <button onClick={() => download('csv')} className="btn-ghost btn-sm flex-1 justify-center gap-1">
-                  <Download className="w-3.5 h-3.5" /> CSV
-                </button>
-                <button onClick={() => toast('Opening print dialog...')} className="btn-ghost btn-sm px-2">
-                  <Printer className="w-3.5 h-3.5" />
+                <button onClick={() => toast('Click "Download" in the table below after generating a report', { icon: 'ℹ️' })} className="btn-ghost btn-sm flex-1 justify-center gap-1">
+                  <Download className="w-3.5 h-3.5" /> PDF / CSV
                 </button>
               </div>
             </div>
@@ -123,37 +160,43 @@ export default function Reports({ role }: ReportsProps) {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_REPORTS.map(r => (
-                  <tr key={r.id}>
-                    <td>
-                      <div>
-                        <p className="font-medium text-white">{r.title}</p>
-                        <p className="text-[10px] text-slate-600 font-mono">{r.id}</p>
-                      </div>
-                    </td>
-                    <td><span className="badge badge-info capitalize text-[10px]">{r.type}</span></td>
-                    <td className="text-xs text-slate-400">
-                      {new Date(r.dateFrom).toLocaleDateString()} → {new Date(r.dateTo).toLocaleDateString()}
-                    </td>
-                    <td className="text-xs text-slate-500">
-                      {new Date(r.generatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="font-semibold">{r.totalAlerts}</td>
-                    <td className="text-danger font-semibold">{r.criticalAlerts}</td>
-                    <td>
-                      <span className={`badge text-[10px] ${r.format === 'pdf' ? 'badge-high' : 'badge-medium'}`}>
-                        {r.format.toUpperCase()}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => download(r.format)} className="btn-ghost btn-sm px-2 py-1 text-[10px] gap-1">
-                          <Download className="w-3 h-3" /> Download
-                        </button>
-                      </div>
-                    </td>
+                {reports.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center text-xs text-slate-500 py-6">No reports generated yet.</td>
                   </tr>
-                ))}
+                ) : (
+                  reports.map(r => (
+                    <tr key={r.id}>
+                      <td>
+                        <div>
+                          <p className="font-medium text-white">{r.title}</p>
+                          <p className="text-[10px] text-slate-600 font-mono">{r.id}</p>
+                        </div>
+                      </td>
+                      <td><span className="badge badge-info capitalize text-[10px]">{r.type}</span></td>
+                      <td className="text-xs text-slate-400">
+                        {new Date(r.dateFrom).toLocaleDateString()} → {new Date(r.dateTo).toLocaleDateString()}
+                      </td>
+                      <td className="text-xs text-slate-500">
+                        {new Date(r.generatedAt).toLocaleDateString()}
+                      </td>
+                      <td className="font-semibold">{r.totalAlerts}</td>
+                      <td className="text-danger font-semibold">{r.criticalAlerts}</td>
+                      <td>
+                        <span className={`badge text-[10px] ${r.format === 'pdf' ? 'badge-high' : 'badge-medium'}`}>
+                          {r.format.toUpperCase()}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleDownload(r.id, r.title, r.format)} className="btn-ghost btn-sm px-2 py-1 text-[10px] gap-1">
+                            <Download className="w-3 h-3" /> Download
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
