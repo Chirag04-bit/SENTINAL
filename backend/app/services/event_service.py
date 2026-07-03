@@ -81,6 +81,31 @@ def ingest_event(db: Session, user_id: str, event_data: dict) -> tuple[Event, bo
 
     db.commit()
     db.refresh(event)
+
+    # Broadcast event via WebSocket in real-time
+    try:
+        from app.services.websocket_manager import ws_manager
+        
+        event_payload = {
+            "id": event.id,
+            "user_id": event.user_id,
+            "user_name": user.name if user else "System User",
+            "type": event.type,
+            "ip_address": event.ip_address,
+            "location": event.location,
+            "device": event.device,
+            "amount": float(event.amount) if event.amount is not None else 0.0,
+            "risk_score": event.risk_score,
+            "risk_level": event.risk_level,
+            "is_anomaly": event.is_anomaly,
+            "raw_features": event.raw_features,
+            "timestamp": event.timestamp.isoformat()
+        }
+        ws_manager.broadcast({"type": "event", "data": event_payload})
+    except Exception as ws_err:
+        import logging
+        logging.getLogger("SENTINEL").error(f"Failed to broadcast live WebSocket event: {ws_err}")
+
     return event, alert_created
 
 

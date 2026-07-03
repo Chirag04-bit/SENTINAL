@@ -43,13 +43,30 @@ def startup_event():
     finally:
         db.close()
 
-# ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(alerts.router)
 app.include_router(users.router)
 app.include_router(events.router)
 app.include_router(reports.router)
 app.include_router(analytics.router)
+
+
+# ─── WebSockets Ingestion Stream ──────────────────────────────────────────────
+from fastapi import WebSocket, WebSocketDisconnect
+from app.services.websocket_manager import ws_manager
+
+@app.websocket("/ws/events")
+async def websocket_events_endpoint(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive, listen for ping/pong signals
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception as e:
+        logger.warning(f"WebSocket client connection error: {e}")
+        ws_manager.disconnect(websocket)
 
 @app.get("/")
 def read_root():
