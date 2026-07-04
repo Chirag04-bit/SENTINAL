@@ -128,10 +128,23 @@ from app.models.audit_log import AuditLog
 from app.models.alert import Alert
 from pydantic import BaseModel
 import uuid
+import os
+
+from app.services.system_monitor import (
+    get_running_processes, get_installed_software, 
+    get_startup_applications, get_usb_devices
+)
+from app.services.network_monitor import get_live_packets
+from app.services.windows_security import get_security_events
+from app.services.browser_scanner import scan_browser_history, scan_browser_extensions
+from app.services.file_scanner import scan_user_directory
 
 class ExtensionAuditRequest(BaseModel):
     url: str
     domain: str
+
+class FileScanRequest(BaseModel):
+    path: str
 
 @router.post("/me/onboarding/complete", summary="Complete Onboarding")
 def complete_onboarding(
@@ -382,3 +395,230 @@ def audit_browser_tab(
         "is_threat": is_threat,
         "reasons": reasons
     }
+
+def check_permission(user: User, source_name: str) -> bool:
+    try:
+        sources = json.loads(user.connected_sources or "{}")
+        return bool(sources.get(source_name))
+    except Exception:
+        return False
+
+@router.get("/me/system/processes", summary="Get Running Processes")
+def get_processes_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "processes")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Scan Running Processes",
+            source="Running Processes",
+            purpose="Analyze process registry profiles for miner signature heuristics"
+        )
+        db.add(audit)
+        db.commit()
+    return get_running_processes(granted)
+
+@router.get("/me/system/network", summary="Get Live Network Packets")
+def get_network_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "network")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Audit Network Traffic",
+            source="Network Monitoring",
+            purpose="Sniff local TCP/UDP packet headers to detect active port scans"
+        )
+        db.add(audit)
+        db.commit()
+    return get_live_packets(granted)
+
+@router.get("/me/system/software", summary="Get Installed Software")
+def get_software_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "installed_apps")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Scan Software Registry",
+            source="Installed Applications",
+            purpose="Inspect local software uninstall catalogs for vulnerability analysis"
+        )
+        db.add(audit)
+        db.commit()
+    software = get_installed_software(granted)
+    startup = get_startup_applications(granted)
+    return {"software": software, "startup": startup}
+
+@router.get("/me/system/security", summary="Get Windows Event Logs")
+def get_security_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "event_logs")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Query Windows Security Events",
+            source="Windows Event Logs",
+            purpose="Analyze Logon failure audit logs for brute force patterns"
+        )
+        db.add(audit)
+        db.commit()
+    return get_security_events(granted)
+
+@router.get("/me/system/usb", summary="Get USB Devices")
+def get_usb_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "usb")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Scan USB Controllers",
+            source="USB Monitoring",
+            purpose="Inspect WMI PNP descriptors to log external mass storage devices"
+        )
+        db.add(audit)
+        db.commit()
+    return get_usb_devices(granted)
+
+@router.post("/me/system/files/scan", summary="Scan Selected Directory")
+def scan_directory_endpoint(
+    req: FileScanRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "documents") or check_permission(current_user, "desktop")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Scan Directory Files",
+            source="Documents / Desktop Folder",
+            purpose=f"Compute SHA256 hashes of executable binaries in: {req.path}"
+        )
+        db.add(audit)
+        db.commit()
+    return scan_user_directory(req.path, granted)
+
+@router.get("/me/browser/history", summary="Scan Browser History")
+def get_browser_history_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "browser_history")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Query Chrome History",
+            source="Browser History",
+            purpose="Audit URL domains for phishing and typosquatting triggers"
+        )
+        db.add(audit)
+        db.commit()
+    return scan_browser_history(granted)
+
+@router.get("/me/browser/extensions", summary="Scan Browser Extensions")
+def get_browser_extensions_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    granted = check_permission(current_user, "extensions")
+    if granted:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="Audit Installed Extensions",
+            source="Browser Extensions",
+            purpose="Scan extension manifests to flag suspect permission overrides"
+        )
+        db.add(audit)
+        db.commit()
+    return scan_browser_extensions(granted)
+
+@router.get("/me/resources/nearby", summary="Find Nearby Emergency Resources using Google Maps Platform")
+def get_nearby_resources(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    resource_type: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Log access audit log
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Query Emergency Resources",
+        source="Location Coordinates",
+        purpose=f"Locate nearby {resource_type} stations using Google Maps Platform API"
+    )
+    db.add(audit)
+    db.commit()
+
+    google_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+    if google_key:
+        import requests
+        url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={lat},{lng}&radius=5000&type={resource_type}&key={google_key}"
+        try:
+            res = requests.get(url)
+            if res.status_code == 200:
+                data = res.json()
+                results = data.get("results", [])
+                resources = []
+                for r in results[:10]:
+                    loc = r.get("geometry", {}).get("location", {})
+                    resources.append({
+                        "name": r.get("name"),
+                        "address": r.get("vicinity"),
+                        "lat": loc.get("lat"),
+                        "lng": loc.get("lng"),
+                        "distance_km": round(_haversine_distance(lat, lng, loc.get("lat"), loc.get("lng")), 2)
+                    })
+                return resources
+        except Exception as e:
+            logger.error(f"Google Maps API call failed: {e}")
+
+    # Fallback coordinate distance search
+    fallback_data = {
+        "police": [
+            {"name": "Local Cyber Crime Cell", "address": "Cyber Police Station, Bandra Kurla Complex", "lat": 19.0596, "lng": 72.8684},
+            {"name": "Bandra Police Station", "address": "Hill Rd, Bandra West, Mumbai", "lat": 19.0558, "lng": 72.8296},
+            {"name": "Dharavi Police Station", "address": "Dharavi Main Rd, Mumbai", "lat": 19.0380, "lng": 72.8538},
+            {"name": "Kurla Police Station", "address": "LBS Marg, Kurla West, Mumbai", "lat": 19.0652, "lng": 72.8890}
+        ],
+        "bank": [
+            {"name": "State Bank of India (Bandra Branch)", "address": "Linking Road, Bandra West", "lat": 19.0582, "lng": 72.8314},
+            {"name": "HDFC Bank Cyber Security Help Desk", "address": "BKC G Block, Mumbai", "lat": 19.0624, "lng": 72.8644},
+            {"name": "ICICI Bank Branch", "address": "SVT Road, Santacruz West", "lat": 19.0792, "lng": 72.8360}
+        ],
+        "repair": [
+            {"name": "Authorized Device Security & Repair Desk", "address": "Phoenix Marketcity, Kurla", "lat": 19.0864, "lng": 72.8890},
+            {"name": "Apple Authorized Cyber Center", "address": "Maker Maxity, BKC", "lat": 19.0602, "lng": 72.8614}
+        ]
+    }
+    
+    selected = fallback_data.get(resource_type, fallback_data["police"])
+    sorted_resources = []
+    
+    for r in selected:
+        dist = _haversine_distance(lat, lng, r["lat"], r["lng"])
+        sorted_resources.append({
+            **r,
+            "distance_km": round(dist, 2)
+        })
+        
+    return sorted(sorted_resources, key=lambda x: x["distance_km"])
+
+def _haversine_distance(lat1, lon1, lat2, lon2):
+    import math
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c

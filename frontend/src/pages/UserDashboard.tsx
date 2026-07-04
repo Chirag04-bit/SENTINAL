@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Shield, AlertTriangle, Activity, Clock, Smartphone, MapPin } from 'lucide-react';
+import { 
+  Shield, AlertTriangle, Activity, Clock, Smartphone, MapPin, 
+  Server
+} from 'lucide-react';
 import PageWrapper from '../components/layout/PageWrapper';
 import StatCard from '../components/widgets/StatCard';
 import RiskGauge from '../components/widgets/RiskGauge';
@@ -10,6 +13,7 @@ import { OnboardingWizard } from '../components/widgets/OnboardingWizard';
 import { getMyAlerts } from '../services/alertService';
 import { getMyRiskDetail, getMyActivity, updateMyLocation, getAuditLogs } from '../services/userService';
 import type { Alert, RiskScoreData, ActivityItem } from '../types';
+import { get, post } from '../services/api';
 
 export default function UserDashboard() {
   const { user, login, token } = useAuth();
@@ -18,6 +22,7 @@ export default function UserDashboard() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // GPS Coordinates and Browser Auditing States
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -26,6 +31,23 @@ export default function UserDashboard() {
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+  // Telemetry monitoring states
+  const [processes, setProcesses] = useState<any[]>([]);
+  const [networkPackets, setNetworkPackets] = useState<any[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
+  const [usbDevices, setUsbDevices] = useState<any[]>([]);
+  const [softwareData, setSoftwareData] = useState<{ software: any[]; startup: any[] }>({ software: [], startup: [] });
+  
+  // File scan states
+  const [scannedFiles, setScannedFiles] = useState<any[]>([]);
+  const [scanFolderPath, setScanFolderPath] = useState('C:\\Users');
+  const [scanFolderLoading, setScanFolderLoading] = useState(false);
+  
+  // Google Maps nearby resource states
+  const [nearbyResources, setNearbyResources] = useState<any[]>([]);
+  const [selectedResourceType, setSelectedResourceType] = useState('police');
+  const [activeTelemetryTab, setActiveTelemetryTab] = useState<'processes' | 'network' | 'system' | 'files'>('processes');
 
   const userDevice = user?.device || 'Chrome / Windows 11';
   
@@ -75,27 +97,59 @@ export default function UserDashboard() {
   });
   const locationsList = Array.from(locationsMap.values());
 
+  const loadDashboard = async () => {
+    try {
+      const [alertsData, riskData, activityData, logsData] = await Promise.all([
+        getMyAlerts({ limit: 3, status: 'open' }),
+        getMyRiskDetail(),
+        getMyActivity(),
+        getAuditLogs(),
+      ]);
+      setAlerts(alertsData.data);
+      setRisk(riskData);
+      setActivity(activityData);
+      setAuditLogs(logsData || []);
+    } catch (err) {
+      console.error("Error loading user dashboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const [alertsData, riskData, activityData, logsData] = await Promise.all([
-          getMyAlerts({ limit: 3, status: 'open' }),
-          getMyRiskDetail(),
-          getMyActivity(),
-          getAuditLogs(),
-        ]);
-        setAlerts(alertsData.data);
-        setRisk(riskData);
-        setActivity(activityData);
-        setAuditLogs(logsData || []);
-      } catch (err) {
-        console.error("Error loading user dashboard:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadDashboard();
   }, [user]);
+
+  const loadTelemetry = async () => {
+    try {
+      if (user?.connectedSources?.processes) {
+        const res = await get<any[]>('/users/me/system/processes');
+        setProcesses(res || []);
+      }
+      if (user?.connectedSources?.network) {
+        const res = await get<any[]>('/users/me/system/network');
+        setNetworkPackets(res || []);
+      }
+      if (user?.connectedSources?.event_logs) {
+        const res = await get<any[]>('/users/me/system/security');
+        setSecurityEvents(res || []);
+      }
+      if (user?.connectedSources?.usb) {
+        const res = await get<any[]>('/users/me/system/usb');
+        setUsbDevices(res || []);
+      }
+      if (user?.connectedSources?.installed_apps) {
+        const res = await get<any>('/users/me/system/software');
+        setSoftwareData(res || { software: [], startup: [] });
+      }
+    } catch (e) {
+      console.error("Telemetry query failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadTelemetry();
+  }, [user?.connectedSources]);
 
   const fetchRealTimeLocation = () => {
     if (!navigator.geolocation) {
@@ -121,6 +175,42 @@ export default function UserDashboard() {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+  };
+
+  const fetchNearbyResources = async (type: string) => {
+    if (!gpsCoords) return;
+    try {
+      const res = await get<any[]>('/users/me/resources/nearby', {
+        lat: gpsCoords.lat,
+        lng: gpsCoords.lng,
+        resource_type: type
+      });
+      setNearbyResources(res || []);
+      setSelectedResourceType(type);
+    } catch (e) {
+      console.error("Resource fetch failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (gpsCoords) {
+      fetchNearbyResources('police');
+    }
+  }, [gpsCoords]);
+
+  const handleFileScan = async () => {
+    if (scanFolderLoading) return;
+    setScanFolderLoading(true);
+    try {
+      const res = await post<any[]>('/users/me/system/files/scan', {
+        path: scanFolderPath
+      });
+      setScannedFiles(res || []);
+    } catch (e) {
+      console.error("File scan failed:", e);
+    } finally {
+      setScanFolderLoading(false);
+    }
   };
 
   const handleAuditTab = async () => {
@@ -265,64 +355,322 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            {/* Real-time Auditing Center */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Real-time Telemetry & Host Protections Panel */}
+            <div className="chart-card flex flex-col min-h-[400px]">
+              <p className="chart-title flex items-center gap-2 mb-1">
+                <Server className="w-4 h-4 text-accent" /> Local Host Telemetry & Protections
+              </p>
+              <p className="chart-desc mb-3">Real-time system process metrics, network packets, and security logs.</p>
               
-              {/* GPS Tracker Map */}
-              <div className="chart-card flex flex-col h-[340px]">
-                <p className="chart-title flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-accent" /> Real-Time GPS Tracking Map
-                </p>
-                <p className="chart-desc">Opt-in real-time geographic location monitoring.</p>
-                
-                <div className="flex-1 mt-2 rounded-xl overflow-hidden border border-slate-800 bg-slate-950/60 relative flex flex-col items-center justify-center p-4">
-                  {user?.connectedSources?.location_tracking ? (
-                    gpsLoading ? (
-                      <div className="text-center space-y-2">
-                        <div className="w-8 h-8 mx-auto rounded-full border-2 border-t-blue-500 border-slate-700 animate-spin" />
-                        <p className="text-xs text-slate-400">Requesting coordinates...</p>
-                      </div>
-                    ) : gpsError ? (
-                      <div className="text-center p-3 space-y-2">
-                        <span className="text-xl">⚠️</span>
-                        <p className="text-xs text-rose-400 font-semibold">{gpsError}</p>
-                        <button 
-                          onClick={fetchRealTimeLocation} 
-                          className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all"
-                        >
-                          Retry Permission
-                        </button>
-                      </div>
-                    ) : gpsCoords ? (
-                      <iframe
-                        title="GPS Location Map"
-                        width="100%"
-                        height="100%"
-                        className="border-0 rounded-xl"
-                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${gpsCoords.lng - 0.005}%2C${gpsCoords.lat - 0.005}%2C${gpsCoords.lng + 0.005}%2C${gpsCoords.lat + 0.005}&layer=mapnik&marker=${gpsCoords.lat}%2C${gpsCoords.lng}`}
-                      />
-                    ) : (
-                      <div className="text-center space-y-2">
-                        <p className="text-xs text-slate-500 italic">Coordinates not yet loaded.</p>
-                        <button 
-                          onClick={fetchRealTimeLocation}
-                          className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all"
-                        >
-                          Get Live Location
-                        </button>
-                      </div>
-                    )
-                  ) : (
-                    <div className="text-center p-4 space-y-3">
+              <div className="flex gap-2 mb-4 border-b border-white/5 pb-2">
+                {[
+                  { id: 'processes', name: 'Running Processes', permission: 'processes' },
+                  { id: 'network', name: 'Network Sniffer', permission: 'network' },
+                  { id: 'system', name: 'System Logs & USB', permission: 'event_logs' },
+                  { id: 'files', name: 'File Signature Auditor', permission: 'documents' }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTelemetryTab(t.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      activeTelemetryTab === t.id 
+                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' 
+                        : 'bg-white/5 text-slate-400 border border-transparent hover:bg-white/10'
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 rounded-xl border border-slate-800 bg-slate-950/40 p-4 min-h-[260px] overflow-y-auto">
+                {activeTelemetryTab === 'processes' && (
+                  !user?.connectedSources?.processes ? (
+                    <div className="text-center p-8 space-y-2">
                       <span className="text-2xl">🔒</span>
-                      <p className="text-xs text-slate-400 font-medium">GPS Geolocation Feed Disconnected</p>
-                      <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
-                        Your physical coordinates are protected. Opt-in to "Location Coordinates" feed in Connection Center to activate live mapping.
-                      </p>
+                      <p className="text-xs text-slate-400 font-semibold">Processes Feed Disconnected</p>
+                      <p className="text-[10px] text-slate-500 max-w-sm mx-auto">This feature is currently disabled. Please enable Running Processes permission from Privacy Settings.</p>
                     </div>
-                  )}
-                </div>
-                {user?.connectedSources?.location_tracking && gpsCoords && (
+                  ) : (
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead>
+                        <tr className="text-slate-500 border-b border-white/5 pb-2">
+                          <th className="pb-2">PID</th>
+                          <th className="pb-2">Process Name</th>
+                          <th className="pb-2">CPU</th>
+                          <th className="pb-2">RAM</th>
+                          <th className="pb-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {processes.slice(0, 10).map(p => (
+                          <tr key={p.pid} className="border-b border-white/[0.02] last:border-0">
+                            <td className="py-2 text-slate-400">{p.pid}</td>
+                            <td className="py-2 text-white truncate max-w-[120px]">{p.name}</td>
+                            <td className="py-2 text-slate-300">{p.cpu}%</td>
+                            <td className="py-2 text-slate-300">{p.ram}%</td>
+                            <td className="py-2"><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${p.status === 'Suspicious' ? 'bg-danger/25 text-danger' : 'bg-success/25 text-success'}`}>{p.status}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                )}
+
+                {activeTelemetryTab === 'network' && (
+                  !user?.connectedSources?.network ? (
+                    <div className="text-center p-8 space-y-2">
+                      <span className="text-2xl">🔒</span>
+                      <p className="text-xs text-slate-400 font-semibold">Network Monitor Disconnected</p>
+                      <p className="text-[10px] text-slate-500 max-w-sm mx-auto">This feature is currently disabled. Please enable Network Monitoring permission from Privacy Settings.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead>
+                        <tr className="text-slate-500 border-b border-white/5 pb-2">
+                          <th className="pb-2">Protocol</th>
+                          <th className="pb-2">Source IP</th>
+                          <th className="pb-2">Destination IP</th>
+                          <th className="pb-2">Port</th>
+                          <th className="pb-2">Risk</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {networkPackets.slice(0, 8).map((p, idx) => (
+                          <tr key={idx} className="border-b border-white/[0.02] last:border-0">
+                            <td className="py-2 text-slate-400">{p.protocol}</td>
+                            <td className="py-2 text-white truncate max-w-[100px]">{p.src_ip}</td>
+                            <td className="py-2 text-white truncate max-w-[100px]">{p.dst_ip}</td>
+                            <td className="py-2 text-slate-300">{p.dst_port}</td>
+                            <td className="py-2"><span className={`font-bold ${p.threat_score > 40 ? 'text-danger' : 'text-success'}`}>{p.threat_score}/100</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                )}
+
+                {activeTelemetryTab === 'system' && (
+                  !(user?.connectedSources?.event_logs || user?.connectedSources?.usb || user?.connectedSources?.installed_apps) ? (
+                    <div className="text-center p-8 space-y-2">
+                      <span className="text-2xl">🔒</span>
+                      <p className="text-xs text-slate-400 font-semibold">System Diagnostics Locked</p>
+                      <p className="text-[10px] text-slate-500 max-w-sm mx-auto">Please authorize Event Logs, Installed Applications, or USB permissions to run registry/WMI scans.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {user?.connectedSources?.usb && (
+                        <div>
+                          <h5 className="text-[10px] text-slate-400 font-bold uppercase mb-2">Connected USB Devices</h5>
+                          {usbDevices.length === 0 ? (
+                            <p className="text-[10px] text-slate-500 italic">No USB storage controllers detected.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {usbDevices.slice(0, 3).map((d, i) => (
+                                <div key={i} className="flex justify-between items-center text-xs p-2 rounded bg-white/5 border border-white/5">
+                                  <span className="text-slate-300 font-sans">🔌 {d.name}</span>
+                                  <span className="text-[9px] text-slate-500 font-mono">{d.device_id.slice(0, 15)}...</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {user?.connectedSources?.event_logs && (
+                        <div>
+                          <h5 className="text-[10px] text-slate-400 font-bold uppercase mb-2">Windows Security Logs (Failed Logons)</h5>
+                          <div className="space-y-1.5">
+                            {securityEvents.slice(0, 3).map((e, idx) => (
+                              <div key={idx} className="p-2 rounded bg-white/5 border border-white/5 flex flex-col gap-1 text-[11px]">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-semibold text-white">Event ID {e.event_id}</span>
+                                  <span className={`text-[9px] font-bold px-1.5 rounded uppercase ${e.severity === 'Critical' || e.severity === 'High' ? 'bg-danger/20 text-danger' : 'bg-success/20 text-success'}`}>{e.severity}</span>
+                                </div>
+                                <p className="text-slate-500">{e.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {user?.connectedSources?.installed_apps && (
+                        <div>
+                          <h5 className="text-[10px] text-slate-400 font-bold uppercase mb-2">Registry Installed Applications</h5>
+                          {softwareData.software.length === 0 ? (
+                            <p className="text-[10px] text-slate-500 italic text-center py-2">No apps retrieved.</p>
+                          ) : (
+                            <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                              {softwareData.software.slice(0, 10).map((sw, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-[10px] p-2 rounded bg-white/5 border border-white/5 font-mono">
+                                  <span className="text-slate-300 truncate max-w-[180px]">{sw.name}</span>
+                                  <span className="text-slate-500 shrink-0">{sw.version}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+
+                {activeTelemetryTab === 'files' && (
+                  !(user?.connectedSources?.documents || user?.connectedSources?.desktop) ? (
+                    <div className="text-center p-8 space-y-2">
+                      <span className="text-2xl">🔒</span>
+                      <p className="text-xs text-slate-400 font-semibold">Directory Scans Disabled</p>
+                      <p className="text-[10px] text-slate-500 max-w-sm mx-auto">Please enable Desktop or Documents Scanning permission from Privacy Settings.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={scanFolderPath} 
+                          onChange={(e) => setScanFolderPath(e.target.value)} 
+                          placeholder="C:\Users\username\Desktop" 
+                          className="flex-1 px-3 py-1.5 text-xs bg-slate-950 border border-slate-850 rounded-lg text-white focus:outline-none"
+                        />
+                        <button
+                          onClick={handleFileScan}
+                          disabled={scanFolderLoading}
+                          className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs text-white font-bold transition-all"
+                        >
+                          {scanFolderLoading ? 'Scanning...' : 'Audit Folder'}
+                        </button>
+                      </div>
+
+                      {scannedFiles.length > 0 && (
+                        <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                          {scannedFiles.map((f, i) => (
+                            <div key={i} className="p-2 rounded bg-white/5 border border-white/5 flex justify-between items-center text-xs">
+                              <div>
+                                <p className="font-semibold text-white truncate max-w-[200px]">{f.filename}</p>
+                                <p className="text-[9px] text-slate-500 font-mono truncate max-w-[200px]">SHA256: {f.sha256.slice(0, 16)}...</p>
+                              </div>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${f.status === 'Suspicious' ? 'bg-danger/25 text-danger' : 'bg-success/25 text-success'}`}>{f.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* My Alerts */}
+            {alerts.length > 0 && (
+              <div className="space-y-3 font-sans">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-warning" /> My Open Alerts
+                </h3>
+                {alerts.map(a => <AlertCard key={a.id} alert={a} />)}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Devices, Locations, Recommendations */}
+          <div className="space-y-4">
+
+            {/* Google Maps Security Router */}
+            <div className="chart-card flex flex-col min-h-[380px]">
+              <p className="chart-title flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-accent" /> Google Maps Security Router
+              </p>
+              <p className="chart-desc">Locates and routes to nearest physical security resources.</p>
+              
+              <div className="flex-1 rounded-xl overflow-hidden border border-slate-800 bg-slate-950/60 relative flex flex-col items-center justify-center p-3 min-h-[220px]">
+                {user?.connectedSources?.location_tracking ? (
+                  gpsLoading ? (
+                    <div className="text-center space-y-2">
+                      <div className="w-8 h-8 mx-auto rounded-full border-2 border-t-blue-500 border-slate-700 animate-spin" />
+                      <p className="text-xs text-slate-400">Locating user...</p>
+                    </div>
+                  ) : gpsError ? (
+                    <div className="text-center p-3 space-y-2">
+                      <span className="text-xl">⚠️</span>
+                      <p className="text-xs text-rose-400 font-semibold">{gpsError}</p>
+                      <button 
+                        onClick={fetchRealTimeLocation} 
+                        className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all"
+                      >
+                        Retry Geolocation
+                      </button>
+                    </div>
+                  ) : gpsCoords ? (
+                    <iframe
+                      title="Google Maps Location View"
+                      width="100%"
+                      height="100%"
+                      className="border-0 rounded-xl min-h-[180px]"
+                      src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}&q=${gpsCoords.lat},${gpsCoords.lng}&zoom=14`}
+                    />
+                  ) : (
+                    <div className="text-center space-y-2">
+                      <p className="text-xs text-slate-500 italic">User coordinates not verified.</p>
+                      <button 
+                        onClick={fetchRealTimeLocation}
+                        className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all"
+                      >
+                        Find My Coordinates
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <div className="text-center p-4 space-y-3">
+                    <span className="text-2xl">🔒</span>
+                    <p className="text-xs text-slate-400 font-medium">GPS Geolocation Feed Disconnected</p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                      Your physical coordinates are protected. Opt-in to "Location Coordinates" feed in Connection Center to activate live mapping.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {user?.connectedSources?.location_tracking && gpsCoords && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex gap-1.5">
+                    {[
+                      { id: 'police', label: '👮 Police / Cyber Cell' },
+                      { id: 'bank', label: '🏦 Banks' },
+                      { id: 'repair', label: '🛠️ Repairs' }
+                    ].map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => fetchNearbyResources(r.id)}
+                        className={`flex-1 py-1 rounded text-[10px] font-semibold transition-all ${
+                          selectedResourceType === r.id 
+                            ? 'bg-blue-600 text-white font-bold' 
+                            : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1">
+                    {nearbyResources.map((res, i) => (
+                      <div key={i} className="p-2 rounded bg-white/5 border border-white/5 flex flex-col gap-1 text-[10px]">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-white truncate max-w-[180px]">{res.name}</span>
+                          <span className="text-slate-500 font-mono font-bold shrink-0">{res.distance_km} km</span>
+                        </div>
+                        <p className="text-slate-500 truncate">{res.address}</p>
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&origin=${gpsCoords.lat},${gpsCoords.lng}&destination=${res.lat},${res.lng}&travelmode=driving`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9px] text-blue-400 hover:underline inline-block mt-0.5"
+                        >
+                          Show driving directions in Google Maps →
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="mt-2 space-y-1.5 border-t border-white/5 pt-2">
                     <p className="text-[10px] text-slate-500 font-semibold uppercase">Map Position Adjuster (ISP Override)</p>
                     <div className="flex gap-2">
@@ -356,88 +704,74 @@ export default function UserDashboard() {
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Extension Browser Tab Scanner */}
-              <div className="chart-card flex flex-col h-[340px]">
-                <p className="chart-title flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-accent" /> Active Browser Tab Auditor
-                </p>
-                <p className="chart-desc">Audits URL integrity of tabs in connected browsers.</p>
-                
-                <div className="flex-1 mt-2 rounded-xl p-4 border border-slate-800 bg-slate-950/40 space-y-3 flex flex-col justify-between">
-                  {(user?.connectedSources?.chrome || user?.connectedSources?.firefox) ? (
-                    <>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-[10px] text-slate-400">
-                          <span>EXTENSION STATUS</span>
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
-                          </span>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          <input 
-                            type="text" 
-                            value={urlInput} 
-                            onChange={(e) => setUrlInput(e.target.value)} 
-                            placeholder="Enter a website URL..." 
-                            className="flex-1 px-3 py-1.5 text-xs bg-slate-950 border border-slate-855 rounded-lg focus:border-blue-500 text-white placeholder-slate-600 focus:outline-none"
-                          />
-                          <button 
-                            disabled={scanLoading}
-                            onClick={handleAuditTab}
-                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all disabled:opacity-50"
-                          >
-                            {scanLoading ? 'Auditing...' : 'Audit Tab'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 rounded-lg bg-slate-900/40 border border-slate-855 p-3 mt-1 flex flex-col justify-center min-h-[90px]">
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-slate-500 font-semibold uppercase">Currently Audited Domain</p>
-                          <p className="text-xs text-white font-mono truncate">{auditedUrl}</p>
-                          
-                          {scanLoading ? (
-                            <p className="text-[10px] text-blue-400 italic animate-pulse mt-2">Running tab registry security audit...</p>
-                          ) : scanResult ? (
-                            <div className="mt-2 p-2 rounded bg-slate-950/80 border border-slate-855 text-xs text-slate-300 font-sans">
-                              {scanResult}
-                            </div>
-                          ) : (
-                            <p className="text-[10px] text-slate-500 italic mt-2">verified Google website active tab scanner ready.</p>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center p-4 space-y-3 my-auto">
-                      <span className="text-2xl">🔒</span>
-                      <p className="text-xs text-slate-400 font-medium">Browser Feed Disconnected</p>
-                      <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
-                        Browser histories are not tracked. Connect the "Chrome Browser Extension" source in Connection Center to simulate tab audits.
-                      </p>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* My Alerts */}
-            {alerts.length > 0 && (
-              <div className="space-y-3 font-sans">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-warning" /> My Open Alerts
-                </h3>
-                {alerts.map(a => <AlertCard key={a.id} alert={a} />)}
-              </div>
-            )}
-          </div>
+            {/* Chrome Browser Auditor Simulator */}
+            <div className="chart-card flex flex-col min-h-[300px]">
+              <p className="chart-title flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-accent" /> Active Browser Tab Auditor
+              </p>
+              <p className="chart-desc">Audits URL integrity of tabs in connected browsers.</p>
+              
+              <div className="flex-1 mt-2 rounded-xl p-4 border border-slate-800 bg-slate-950/40 space-y-3 flex flex-col justify-between">
+                {(user?.connectedSources?.chrome || user?.connectedSources?.firefox) ? (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[10px] text-slate-400">
+                        <span>EXTENSION STATUS</span>
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                        </span>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={urlInput} 
+                          onChange={(e) => setUrlInput(e.target.value)} 
+                          placeholder="Enter a website URL..." 
+                          className="flex-1 px-3 py-1.5 text-xs bg-slate-950 border border-slate-855 rounded-lg focus:border-blue-500 text-white placeholder-slate-600 focus:outline-none"
+                        />
+                        <button 
+                          disabled={scanLoading}
+                          onClick={handleAuditTab}
+                          className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all disabled:opacity-50"
+                        >
+                          {scanLoading ? 'Auditing...' : 'Audit Tab'}
+                        </button>
+                      </div>
+                    </div>
 
-          {/* Right: Devices, Locations, Recommendations */}
-          <div className="space-y-4">
+                    <div className="flex-1 rounded-lg bg-slate-900/40 border border-slate-855 p-3 mt-1 flex flex-col justify-center min-h-[90px]">
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-slate-500 font-semibold uppercase">Currently Audited Domain</p>
+                        <p className="text-xs text-white font-mono truncate">{auditedUrl}</p>
+                        
+                        {scanLoading ? (
+                          <p className="text-[10px] text-blue-400 italic animate-pulse mt-2">Running tab registry security audit...</p>
+                        ) : scanResult ? (
+                          <div className="mt-2 p-2 rounded bg-slate-950/80 border border-slate-855 text-xs text-slate-300 font-sans">
+                            {scanResult}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-500 italic mt-2">verified Google website active tab scanner ready.</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center p-4 space-y-3 my-auto">
+                    <span className="text-2xl">🔒</span>
+                    <p className="text-xs text-slate-400 font-medium">Browser Feed Disconnected</p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                      Browser histories are not tracked. Connect the "Chrome Browser Extension" source in Connection Center to simulate tab audits.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Devices */}
             <div className="chart-card">
@@ -543,8 +877,11 @@ export default function UserDashboard() {
                 ))}
               </div>
             </div>
+
           </div>
+
         </div>
+
       </div>
     </PageWrapper>
   );
