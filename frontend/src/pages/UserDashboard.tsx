@@ -8,7 +8,7 @@ import { RiskScoreTrendChart } from '../components/charts';
 import { useAuth } from '../context/AuthContext';
 import { OnboardingWizard } from '../components/widgets/OnboardingWizard';
 import { getMyAlerts } from '../services/alertService';
-import { getMyRiskDetail, getMyActivity, updateMyLocation } from '../services/userService';
+import { getMyRiskDetail, getMyActivity, updateMyLocation, getAuditLogs } from '../services/userService';
 import type { Alert, RiskScoreData, ActivityItem } from '../types';
 
 export default function UserDashboard() {
@@ -25,6 +25,7 @@ export default function UserDashboard() {
   const [urlInput, setUrlInput] = useState('https://google.com');
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const userDevice = user?.device || 'Chrome / Windows 11';
   const devicesList = [
@@ -43,14 +44,16 @@ export default function UserDashboard() {
   useEffect(() => {
     const loadDashboard = async () => {
       try {
-        const [alertsData, riskData, activityData] = await Promise.all([
+        const [alertsData, riskData, activityData, logsData] = await Promise.all([
           getMyAlerts({ limit: 3, status: 'open' }),
           getMyRiskDetail(),
           getMyActivity(),
+          getAuditLogs(),
         ]);
         setAlerts(alertsData.data);
         setRisk(riskData);
         setActivity(activityData);
+        setAuditLogs(logsData || []);
       } catch (err) {
         console.error("Error loading user dashboard:", err);
       } finally {
@@ -285,6 +288,41 @@ export default function UserDashboard() {
                     </div>
                   )}
                 </div>
+                {user?.connectedSources?.location_tracking && gpsCoords && (
+                  <div className="mt-2 space-y-1.5 border-t border-white/5 pt-2">
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase">Map Position Adjuster (ISP Override)</p>
+                    <div className="flex gap-2">
+                      <div className="flex-1 flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded border border-white/5">
+                        <span className="text-[9px] text-slate-500 font-mono">LAT</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={gpsCoords.lat}
+                          onChange={async (e) => {
+                            const lat = parseFloat(e.target.value) || 0;
+                            setGpsCoords(prev => prev ? { ...prev, lat } : null);
+                            try { await updateMyLocation(lat, gpsCoords.lng); } catch {}
+                          }}
+                          className="w-full bg-transparent text-[10px] text-white focus:outline-none font-mono"
+                        />
+                      </div>
+                      <div className="flex-1 flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded border border-white/5">
+                        <span className="text-[9px] text-slate-500 font-mono">LNG</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={gpsCoords.lng}
+                          onChange={async (e) => {
+                            const lng = parseFloat(e.target.value) || 0;
+                            setGpsCoords(prev => prev ? { ...prev, lng } : null);
+                            try { await updateMyLocation(gpsCoords.lat, lng); } catch {}
+                          }}
+                          className="w-full bg-transparent text-[10px] text-white focus:outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Extension Browser Tab Scanner */}
@@ -408,6 +446,32 @@ export default function UserDashboard() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Live Privacy Access Logs */}
+            <div className="chart-card">
+              <p className="chart-title mb-3 flex items-center gap-2">
+                🔒 Live Data Access Audit Log
+              </p>
+              <p className="chart-desc">Tracks exact moments and purposes when SENTINEL accesses your connected data feeds.</p>
+              <div className="relative border-l border-white/10 pl-4 space-y-4 max-h-[220px] overflow-y-auto pr-1">
+                {auditLogs.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 italic py-1">No data feeds queried yet. All features remain restricted until authorized.</p>
+                ) : (
+                  auditLogs.slice(0, 5).map(l => (
+                    <div key={l.id} className="relative text-[11px] space-y-0.5">
+                      <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-500 border border-slate-900" />
+                      <div className="flex justify-between items-center text-[10px] text-slate-400">
+                        <span className="font-semibold text-slate-300">{l.action}</span>
+                        <span>{new Date(l.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <p className="text-slate-500 leading-relaxed">
+                        Source: <span className="text-slate-400 font-medium">{l.source}</span> · Reason: {l.purpose}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
