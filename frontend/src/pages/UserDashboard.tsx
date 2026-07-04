@@ -600,13 +600,28 @@ export default function UserDashboard() {
                       </button>
                     </div>
                   ) : gpsCoords ? (
-                    <iframe
-                      title="Google Maps Location View"
-                      width="100%"
-                      height="100%"
-                      className="border-0 rounded-xl min-h-[180px]"
-                      src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}&q=${gpsCoords.lat},${gpsCoords.lng}&zoom=14`}
-                    />
+                    import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
+                      <iframe
+                        title="Google Maps Location View"
+                        width="100%"
+                        height="100%"
+                        className="border-0 rounded-xl min-h-[180px]"
+                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&q=${gpsCoords.lat},${gpsCoords.lng}&zoom=14`}
+                      />
+                    ) : (
+                      <div className="relative w-full h-full min-h-[180px] flex flex-col justify-between">
+                        <iframe
+                          title="GPS Location Map"
+                          width="100%"
+                          height="100%"
+                          className="border-0 rounded-xl min-h-[150px]"
+                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${gpsCoords.lng - 0.005}%2C${gpsCoords.lat - 0.005}%2C${gpsCoords.lng + 0.005}%2C${gpsCoords.lat + 0.005}&layer=mapnik&marker=${gpsCoords.lat}%2C${gpsCoords.lng}`}
+                        />
+                        <div className="absolute top-2 left-2 bg-slate-950/90 border border-amber-500/20 text-amber-400 px-2 py-1 rounded text-[8px] font-semibold leading-normal backdrop-blur max-w-[90%]">
+                          ⚠️ Google Maps Key missing. Set VITE_GOOGLE_MAPS_API_KEY in frontend/.env to unlock directions routing.
+                        </div>
+                      </div>
+                    )
                   ) : (
                     <div className="text-center space-y-2">
                       <p className="text-xs text-slate-500 italic">User coordinates not verified.</p>
