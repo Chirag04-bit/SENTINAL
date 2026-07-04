@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 280px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .status-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      margin-left: auto;
+    }
+    .connected {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+    }
+    .disconnected {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 11px;
+    }
+    .domain {
+      font-family: monospace;
+      color: #38bdf8;
+      word-break: break-all;
+      margin: 4px 0 8px 0;
+    }
+    .result {
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    .safe { color: #10b981; }
+    .suspicious { color: #f59e0b; }
+    .threat { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span>🛡️</span>
+    <span class="title">SENTINEL Shield</span>
+    <span id="connection-status" class="status-badge disconnected">Checking...</span>
+  </div>
+  <div class="card">
+    <div style="color: #94a3b8; font-weight: 600; font-size: 9px; letter-spacing: 0.5px;">ACTIVE AUDITED TAB</div>
+    <div id="active-domain" class="domain">None</div>
+    <div style="color: #94a3b8; font-weight: 600; font-size: 9px; letter-spacing: 0.5px;">SCAN STATUS</div>
+    <div id="scan-result" class="result">Idle</div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
