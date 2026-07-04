@@ -272,3 +272,27 @@ def get_user_audit_logs(
         }
         for l in logs
     ]
+
+@router.post("/me/location", summary="Update User Real-time Location")
+def update_user_location(
+    coords: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    lat = coords.get("latitude")
+    lng = coords.get("longitude")
+    
+    # Save formatted string to location
+    current_user.location = f"Lat: {lat}, Lng: {lng}"
+    
+    # Log audit event for transparency
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Fetch Geolocation Coordinates",
+        source="Location Coordinates",
+        purpose="Evaluate impossible travel anomaly constraints"
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(current_user)
+    return {"status": "success", "location": current_user.location}

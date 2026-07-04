@@ -32,7 +32,7 @@ const ALL_SOURCES: SourceItem[] = [
 ];
 
 export default function ConnectionCenter({ role }: { role: 'user' | 'admin' }) {
-  const { user, login } = useAuth();
+  const { user, login, token } = useAuth();
   const [sources, setSources] = useState<Record<string, boolean>>({});
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,7 @@ export default function ConnectionCenter({ role }: { role: 'user' | 'admin' }) {
       // Update local storage and context
       if (user) {
         const updatedUser = { ...user, connectedSources: updated };
-        login(updatedUser, localStorage.getItem('token') || '');
+        login(updatedUser, token || '');
       }
 
       // Reload audit log

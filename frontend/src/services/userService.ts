@@ -110,3 +110,11 @@ export interface AuditLogEntry {
 export const getAuditLogs = async (): Promise<AuditLogEntry[]> => {
   return get<AuditLogEntry[]>('/users/me/audit-logs');
 };
+
+/**
+ * Updates the user's active GPS coordinates in the database
+ */
+export const updateMyLocation = async (latitude: number, longitude: number): Promise<string> => {
+  const res = await post<any>('/users/me/location', { latitude, longitude });
+  return res.location;
+};

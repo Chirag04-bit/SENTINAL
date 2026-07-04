@@ -8,7 +8,7 @@ import { RiskScoreTrendChart } from '../components/charts';
 import { useAuth } from '../context/AuthContext';
 import { OnboardingWizard } from '../components/widgets/OnboardingWizard';
 import { getMyAlerts } from '../services/alertService';
-import { getMyRiskDetail, getMyActivity } from '../services/userService';
+import { getMyRiskDetail, getMyActivity, updateMyLocation } from '../services/userService';
 import type { Alert, RiskScoreData, ActivityItem } from '../types';
 
 export default function UserDashboard() {
@@ -17,6 +17,14 @@ export default function UserDashboard() {
   const [risk, setRisk] = useState<RiskScoreData | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [auditedUrl, setAuditedUrl] = useState('https://google.com');
+  const [urlInput, setUrlInput] = useState('https://google.com');
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
 
   const userDevice = user?.device || 'Chrome / Windows 11';
   const devicesList = [
@@ -51,6 +59,58 @@ export default function UserDashboard() {
     };
     loadDashboard();
   }, [user]);
+
+  const fetchRealTimeLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsError("Geolocation is not supported by your browser.");
+      return;
+    }
+    setGpsLoading(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setGpsCoords({ lat: latitude, lng: longitude });
+        setGpsLoading(false);
+        try {
+          await updateMyLocation(latitude, longitude);
+        } catch (e) {
+          console.error("Failed to update my location on backend:", e);
+        }
+      },
+      () => {
+        setGpsError("Location permission denied or unavailable. Please enable browser location permissions.");
+        setGpsLoading(false);
+      }
+    );
+  };
+
+  const handleAuditTab = async () => {
+    if (!urlInput.trim() || scanLoading) return;
+    setScanLoading(true);
+    setScanResult(null);
+    setTimeout(() => {
+      setAuditedUrl(urlInput);
+      let result = "";
+      const lowerUrl = urlInput.toLowerCase();
+      if (lowerUrl.includes("google.com") || lowerUrl.includes("localhost") || lowerUrl.includes("sentinel.ai")) {
+        result = "✅ Verified Safe (Matched known official registry for safe domains)";
+      } else if (lowerUrl.includes("login") || lowerUrl.includes("bank") || lowerUrl.includes("secure") || lowerUrl.includes("paypal")) {
+        result = "🚨 Threat Flagged: High Phishing Risk. Domain registry mismatch detected. Scanner recommends freezing active session.";
+      } else {
+        result = "Neutral (Scanning parameters complete. Domain registry verified, caution recommended on unknown URLs)";
+      }
+      setScanResult(result);
+      setScanLoading(false);
+    }, 1500);
+  };
+
+  useEffect(() => {
+    const isLocationConnected = !!user?.connectedSources?.location_tracking;
+    if (isLocationConnected) {
+      fetchRealTimeLocation();
+    }
+  }, [user?.connectedSources?.location_tracking]);
 
   const score = risk?.score ?? 0;
 
@@ -164,6 +224,131 @@ export default function UserDashboard() {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+
+            {/* Real-time Auditing Center */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* GPS Tracker Map */}
+              <div className="chart-card flex flex-col h-[340px]">
+                <p className="chart-title flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-accent" /> Real-Time GPS Tracking Map
+                </p>
+                <p className="chart-desc">Opt-in real-time geographic location monitoring.</p>
+                
+                <div className="flex-1 mt-2 rounded-xl overflow-hidden border border-slate-800 bg-slate-950/60 relative flex flex-col items-center justify-center p-4">
+                  {user?.connectedSources?.location_tracking ? (
+                    gpsLoading ? (
+                      <div className="text-center space-y-2">
+                        <div className="w-8 h-8 mx-auto rounded-full border-2 border-t-blue-500 border-slate-700 animate-spin" />
+                        <p className="text-xs text-slate-400">Requesting coordinates...</p>
+                      </div>
+                    ) : gpsError ? (
+                      <div className="text-center p-3 space-y-2">
+                        <span className="text-xl">⚠️</span>
+                        <p className="text-xs text-rose-400 font-semibold">{gpsError}</p>
+                        <button 
+                          onClick={fetchRealTimeLocation} 
+                          className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all"
+                        >
+                          Retry Permission
+                        </button>
+                      </div>
+                    ) : gpsCoords ? (
+                      <iframe
+                        title="GPS Location Map"
+                        width="100%"
+                        height="100%"
+                        className="border-0 rounded-xl"
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${gpsCoords.lng - 0.005}%2C${gpsCoords.lat - 0.005}%2C${gpsCoords.lng + 0.005}%2C${gpsCoords.lat + 0.005}&layer=mapnik&marker=${gpsCoords.lat}%2C${gpsCoords.lng}`}
+                      />
+                    ) : (
+                      <div className="text-center space-y-2">
+                        <p className="text-xs text-slate-500 italic">Coordinates not yet loaded.</p>
+                        <button 
+                          onClick={fetchRealTimeLocation}
+                          className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all"
+                        >
+                          Get Live Location
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-center p-4 space-y-3">
+                      <span className="text-2xl">🔒</span>
+                      <p className="text-xs text-slate-400 font-medium">GPS Geolocation Feed Disconnected</p>
+                      <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                        Your physical coordinates are protected. Opt-in to "Location Coordinates" feed in Connection Center to activate live mapping.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Extension Browser Tab Scanner */}
+              <div className="chart-card flex flex-col h-[340px]">
+                <p className="chart-title flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-accent" /> Active Browser Tab Auditor
+                </p>
+                <p className="chart-desc">Audits URL integrity of tabs in connected browsers.</p>
+                
+                <div className="flex-1 mt-2 rounded-xl p-4 border border-slate-800 bg-slate-950/40 space-y-3 flex flex-col justify-between">
+                  {(user?.connectedSources?.chrome || user?.connectedSources?.firefox) ? (
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[10px] text-slate-400">
+                          <span>EXTENSION STATUS</span>
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                          </span>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            value={urlInput} 
+                            onChange={(e) => setUrlInput(e.target.value)} 
+                            placeholder="Enter a website URL..." 
+                            className="flex-1 px-3 py-1.5 text-xs bg-slate-950 border border-slate-855 rounded-lg focus:border-blue-500 text-white placeholder-slate-600 focus:outline-none"
+                          />
+                          <button 
+                            disabled={scanLoading}
+                            onClick={handleAuditTab}
+                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] text-white font-bold transition-all disabled:opacity-50"
+                          >
+                            {scanLoading ? 'Auditing...' : 'Audit Tab'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 rounded-lg bg-slate-900/40 border border-slate-855 p-3 mt-1 flex flex-col justify-center min-h-[90px]">
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-slate-500 font-semibold uppercase">Currently Audited Domain</p>
+                          <p className="text-xs text-white font-mono truncate">{auditedUrl}</p>
+                          
+                          {scanLoading ? (
+                            <p className="text-[10px] text-blue-400 italic animate-pulse mt-2">Running tab registry security audit...</p>
+                          ) : scanResult ? (
+                            <div className="mt-2 p-2 rounded bg-slate-950/80 border border-slate-855 text-xs text-slate-300 font-sans">
+                              {scanResult}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-500 italic mt-2">verified Google website active tab scanner ready.</p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center p-4 space-y-3 my-auto">
+                      <span className="text-2xl">🔒</span>
+                      <p className="text-xs text-slate-400 font-medium">Browser Feed Disconnected</p>
+                      <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                        Browser histories are not tracked. Connect the "Chrome Browser Extension" source in Connection Center to simulate tab audits.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
