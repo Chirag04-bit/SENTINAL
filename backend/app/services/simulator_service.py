@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import json
 import threading
 import pandas as pd
 from typing import Dict, Any, List
@@ -18,6 +19,7 @@ class EventSimulator:
         self._stop_event = threading.Event()
         self.is_running = False
         
+        # Load datasets for stream ingestion
         self.fraud_df = None
         self.kdd_df = None
         self._load_datasets()
@@ -25,15 +27,14 @@ class EventSimulator:
     def _load_datasets(self):
         """Loads data rows for streaming simulation."""
         try:
-            fraud_path = os.path.abspath(os.path.join(os.getcwd(), "../datasets/archive (1)/creditcard.csv"))
+            fraud_path = os.path.abspath(os.path.join(os.getcwd(), "../ml/datasets/creditcard_downsampled.csv"))
             if os.path.exists(fraud_path):
-                # Load first 10,000 rows to keep memory low
-                self.fraud_df = pd.read_csv(fraud_path, nrows=10000)
-                logger.info("Simulator loaded fraud dataset rows.")
+                self.fraud_df = pd.read_csv(fraud_path)
+                logger.info("Simulator loaded creditcard fraud dataset rows.")
             else:
                 logger.warning(f"Simulator fraud dataset not found at {fraud_path}")
 
-            kdd_path = os.path.abspath(os.path.join(os.getcwd(), "../datasets/archive (3)/KDDTrain+_20Percent.txt"))
+            kdd_path = os.path.abspath(os.path.join(os.getcwd(), "../ml/datasets/KDDTrain+_20Percent.txt"))
             if os.path.exists(kdd_path):
                 kdd_cols = [
                     'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
@@ -88,9 +89,23 @@ class EventSimulator:
                     continue
                 user = random.choice(users)
                 
+                # Check user privacy permissions to guarantee opt-in behavior
+                try:
+                    permissions = json.loads(user.connected_sources or "{}")
+                except Exception:
+                    permissions = {}
+                
                 # 2. Select event type: 50% fraud/transaction, 50% intrusion
                 event_type = random.choice(["fraud", "intrusion"])
                 event_data = {}
+                
+                # Skip generation if the user has not connected/allowed monitoring for this stream
+                if event_type == "fraud" and not (permissions.get("chrome", False) or permissions.get("google_account", False)):
+                    time.sleep(interval)
+                    continue
+                if event_type == "intrusion" and not (permissions.get("wifi", False) or permissions.get("windows_logs", False)):
+                    time.sleep(interval)
+                    continue
                 
                 if event_type == "fraud" and self.fraud_df is not None:
                     # Pick a random row

@@ -58,6 +58,10 @@ class User(Base):
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     joined_at:  Mapped[datetime]        = mapped_column(DateTime(timezone=True), default=_now)
 
+    # ── AI Security Assistant Preferences ──────────────────────────────────────
+    has_completed_onboarding: Mapped[bool] = mapped_column(Boolean, default=False)
+    connected_sources: Mapped[str | None] = mapped_column(String(4000), default="{}")
+
     # ── Relationships ─────────────────────────────────────────────────────────
     alerts: Mapped[list["Alert"]] = relationship(  # type: ignore[name-defined]
         "Alert",

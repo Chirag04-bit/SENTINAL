@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, BarChart3, FileText, Settings,
   LogOut, Shield, Users, Search, Radio, ChevronLeft, ChevronRight,
-  AlertTriangle,
+  AlertTriangle, Plug, Bot
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -12,6 +12,8 @@ interface SidebarProps {
 
 const USER_LINKS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'My Dashboard' },
+  { to: '/sources',   icon: Plug,            label: 'Connection Center' },
+  { to: '/copilot',   icon: Bot,             label: 'AI Copilot' },
   { to: '/alerts',    icon: AlertTriangle,   label: 'My Alerts'    },
   { to: '/analytics', icon: BarChart3,       label: 'Analytics'    },
   { to: '/reports',   icon: FileText,        label: 'Reports'      },
@@ -20,6 +22,8 @@ const USER_LINKS = [
 
 const ADMIN_LINKS = [
   { to: '/admin',           icon: Radio,          label: 'Live Monitor'  },
+  { to: '/admin/sources',   icon: Plug,           label: 'Connection Center' },
+  { to: '/admin/copilot',   icon: Bot,            label: 'AI Copilot' },
   { to: '/admin/alerts',    icon: AlertTriangle,  label: 'All Alerts'   },
   { to: '/admin/analytics', icon: BarChart3,      label: 'Analytics'    },
   { to: '/admin/reports',   icon: FileText,       label: 'Reports'      },

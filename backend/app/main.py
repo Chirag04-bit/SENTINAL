@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.config.database import engine, Base, SessionLocal
-from app.api.routers import auth, alerts, users, events, reports, analytics
+from app.api.routers import auth, alerts, users, events, reports, analytics, copilot
+from app.models.audit_log import AuditLog
 from app.database.seed import seed_database
 
 # Configure logging
@@ -49,6 +50,7 @@ app.include_router(users.router)
 app.include_router(events.router)
 app.include_router(reports.router)
 app.include_router(analytics.router)
+app.include_router(copilot.router)
 
 
 # ─── WebSockets Ingestion Stream ──────────────────────────────────────────────

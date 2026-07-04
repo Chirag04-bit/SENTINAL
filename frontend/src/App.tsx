@@ -17,6 +17,8 @@ import Landing       from './pages/Landing';
 import Login         from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import UserDashboard from './pages/UserDashboard';
+import ConnectionCenter from './pages/ConnectionCenter';
+import Copilot          from './pages/Copilot';
 import Alerts        from './pages/Alerts';
 import Analytics     from './pages/Analytics';
 import Reports       from './pages/Reports';
@@ -76,6 +78,16 @@ export default function App() {
                   <ErrorBoundary><Reports role="admin" /></ErrorBoundary>
                 </RoleGuard></AuthGuard>
               } />
+              <Route path={ROUTES.ADMIN_SOURCES} element={
+                <AuthGuard><RoleGuard allowedRoles={['admin','analyst']}>
+                  <ErrorBoundary><ConnectionCenter role="admin" /></ErrorBoundary>
+                </RoleGuard></AuthGuard>
+              } />
+              <Route path={ROUTES.ADMIN_COPILOT} element={
+                <AuthGuard><RoleGuard allowedRoles={['admin','analyst']}>
+                  <ErrorBoundary><Copilot role="admin" /></ErrorBoundary>
+                </RoleGuard></AuthGuard>
+              } />
               <Route path={ROUTES.ADMIN_SETTINGS} element={
                 <AuthGuard><RoleGuard allowedRoles={['admin','analyst']}>
                   <ErrorBoundary><Settings role="admin" /></ErrorBoundary>
@@ -86,6 +98,16 @@ export default function App() {
               <Route path={ROUTES.USER_DASHBOARD} element={
                 <AuthGuard>
                   <ErrorBoundary><UserDashboard /></ErrorBoundary>
+                </AuthGuard>
+              } />
+              <Route path={ROUTES.USER_SOURCES} element={
+                <AuthGuard>
+                  <ErrorBoundary><ConnectionCenter role="user" /></ErrorBoundary>
+                </AuthGuard>
+              } />
+              <Route path={ROUTES.USER_COPILOT} element={
+                <AuthGuard>
+                  <ErrorBoundary><Copilot role="user" /></ErrorBoundary>
                 </AuthGuard>
               } />
               <Route path={ROUTES.USER_ALERTS} element={

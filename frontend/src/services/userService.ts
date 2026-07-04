@@ -1,5 +1,5 @@
 import type { User, ActivityItem, RiskScoreData } from '../types';
-import { get, patch } from './api';
+import { get, patch, post } from './api';
 
 // ─── Mapper ───────────────────────────────────────────────────────────────────
 
@@ -17,6 +17,8 @@ export const mapUser = (u: any): User => ({
   joinedAt: u.joined_at,
   totalAlerts: u.total_alerts,
   openAlerts: u.open_alerts,
+  hasCompletedOnboarding: u.has_completed_onboarding,
+  connectedSources: u.connected_sources ? (typeof u.connected_sources === 'string' ? JSON.parse(u.connected_sources) : u.connected_sources) : {},
 });
 
 // ─── APIs ─────────────────────────────────────────────────────────────────────
@@ -56,4 +58,55 @@ export const getMyRiskDetail = async (): Promise<RiskScoreData> => {
  */
 export const getMyActivity = async (): Promise<ActivityItem[]> => {
   return get<ActivityItem[]>('/users/me/activity');
+};
+
+/**
+ * Marks onboarding process as completed
+ */
+export const completeOnboarding = async (): Promise<void> => {
+  await post('/users/me/onboarding/complete');
+};
+
+/**
+ * Retrieves the user's connection status dictionary
+ */
+export const getConnectedSources = async (): Promise<Record<string, boolean>> => {
+  return get<Record<string, boolean>>('/users/me/sources');
+};
+
+/**
+ * Updates connection states in the user profile settings
+ */
+export const updateConnectedSources = async (sources: Record<string, boolean>): Promise<Record<string, boolean>> => {
+  const res = await post<any>('/users/me/sources', sources);
+  return res.connected_sources;
+};
+
+/**
+ * Erases all threat events, database alerts, and system audit logs
+ */
+export const purgeUserData = async (): Promise<void> => {
+  await post('/users/me/data/delete');
+};
+
+/**
+ * Exposes a structured JSON download block of the user profile, event lists, and alerts
+ */
+export const exportUserData = async (): Promise<any> => {
+  return get<any>('/users/me/data/export');
+};
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  source: string;
+  purpose: string;
+  timestamp: string;
+}
+
+/**
+ * Retrieves the security access audit trail logs
+ */
+export const getAuditLogs = async (): Promise<AuditLogEntry[]> => {
+  return get<AuditLogEntry[]>('/users/me/audit-logs');
 };

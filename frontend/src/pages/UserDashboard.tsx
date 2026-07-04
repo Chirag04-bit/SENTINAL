@@ -6,12 +6,13 @@ import RiskGauge from '../components/widgets/RiskGauge';
 import AlertCard from '../components/widgets/AlertCard';
 import { RiskScoreTrendChart } from '../components/charts';
 import { useAuth } from '../context/AuthContext';
+import { OnboardingWizard } from '../components/widgets/OnboardingWizard';
 import { getMyAlerts } from '../services/alertService';
 import { getMyRiskDetail, getMyActivity } from '../services/userService';
 import type { Alert, RiskScoreData, ActivityItem } from '../types';
 
 export default function UserDashboard() {
-  const { user } = useAuth();
+  const { user, login } = useAuth();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [risk, setRisk] = useState<RiskScoreData | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -65,6 +66,12 @@ export default function UserDashboard() {
 
   return (
     <PageWrapper role="user" title="My Security Dashboard" subtitle="Your personal threat intelligence overview">
+      {user && !user.hasCompletedOnboarding && (
+        <OnboardingWizard 
+          user={user} 
+          onComplete={(updatedUser) => login(updatedUser, localStorage.getItem('token') || '')} 
+        />
+      )}
       <div className="page-content">
 
         {/* ── Welcome Banner ── */}

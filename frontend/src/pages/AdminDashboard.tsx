@@ -9,9 +9,12 @@ import { getAnalyticsSummary, getAlertTrends, getRiskDistribution, getThreatType
 import { getAlerts } from '../services/alertService';
 import { getUsers } from '../services/userService';
 import { get, post } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { OnboardingWizard } from '../components/widgets/OnboardingWizard';
 import type { DashboardStats, AlertTrendPoint, RiskDistribution, ThreatTypeCount, Alert, User } from '../types';
 
 export default function AdminDashboard() {
+  const { user, login } = useAuth();
   const { events: liveEvents, eventsPerMin } = useLiveStream(12);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -98,6 +101,12 @@ export default function AdminDashboard() {
 
   return (
     <PageWrapper role="admin" title="Security Operations Center" subtitle="Live threat monitoring & anomaly detection">
+      {user && !user.hasCompletedOnboarding && (
+        <OnboardingWizard 
+          user={user} 
+          onComplete={(updatedUser) => login(updatedUser, localStorage.getItem('token') || '')} 
+        />
+      )}
       <div className="page-content">
 
         {/* ── SIMULATOR CONTROL BANNER ── */}

@@ -22,6 +22,8 @@ export interface User {
   joinedAt: string;
   totalAlerts: number;
   openAlerts: number;
+  hasCompletedOnboarding?: boolean;
+  connectedSources?: Record<string, boolean>;
 }
 
 // ─── Event ───────────────────────────────────────────────────────────────────

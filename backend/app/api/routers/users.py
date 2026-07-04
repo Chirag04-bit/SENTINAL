@@ -120,3 +120,155 @@ def get_me_activity(
         })
 
     return activities
+
+
+# ─── Privacy Assistant Endpoints ─────────────────────────────────────────────
+import json
+from app.models.audit_log import AuditLog
+from app.models.alert import Alert
+
+@router.post("/me/onboarding/complete", summary="Complete Onboarding")
+def complete_onboarding(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.has_completed_onboarding = True
+    db.commit()
+    db.refresh(current_user)
+    return {"status": "success", "message": "Onboarding completed successfully."}
+
+@router.get("/me/sources", summary="Get Connected Sources")
+def get_connected_sources(
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        sources_dict = json.loads(current_user.connected_sources or "{}")
+    except Exception:
+        sources_dict = {}
+    return sources_dict
+
+@router.post("/me/sources", summary="Update Connected Sources")
+def update_connected_sources(
+    updated_sources: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.connected_sources = json.dumps(updated_sources)
+    
+    # Audit log entry for transparency
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Update Connected Sources",
+        source="Connection Center",
+        purpose="Update privacy authorizations settings"
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(current_user)
+    return {"status": "success", "connected_sources": updated_sources}
+
+@router.post("/me/data/delete", summary="Purge All Personal Logs")
+def purge_personal_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Purge all events and alerts belonging to this user
+    db.query(Alert).filter(Alert.user_id == current_user.id).delete(synchronize_session=False)
+    db.query(Event).filter(Event.user_id == current_user.id).delete(synchronize_session=False)
+    
+    # Audit log entry for erasure
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Purge Personal Logs",
+        source="Privacy Center",
+        purpose="Explicit request to delete collected data and alerts"
+    )
+    db.add(audit)
+    db.commit()
+    return {"status": "success", "message": "All data and threat history deleted successfully."}
+
+@router.get("/me/data/export", summary="Export All Personal Logs")
+def export_personal_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Fetch details
+    events = db.query(Event).filter(Event.user_id == current_user.id).all()
+    alerts = db.query(Alert).filter(Alert.user_id == current_user.id).all()
+    
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Export Personal Logs",
+        source="Privacy Center",
+        purpose="Request to download backup files"
+    )
+    db.add(audit)
+    db.commit()
+
+    try:
+        sources_dict = json.loads(current_user.connected_sources or "{}")
+    except Exception:
+        sources_dict = {}
+
+    return {
+        "user_profile": {
+            "name": current_user.name,
+            "email": current_user.email,
+            "role": current_user.role,
+            "risk_score": current_user.risk_score,
+            "risk_level": current_user.risk_level,
+            "location": current_user.location,
+            "device": current_user.device,
+            "joined_at": current_user.joined_at.isoformat() if current_user.joined_at else None,
+            "connected_sources": sources_dict
+        },
+        "events": [
+            {
+                "id": ev.id,
+                "type": ev.type,
+                "ip_address": ev.ip_address,
+                "location": ev.location,
+                "device": ev.device,
+                "amount": ev.amount,
+                "risk_score": ev.risk_score,
+                "risk_level": ev.risk_level,
+                "timestamp": ev.timestamp.isoformat() if ev.timestamp else None
+            }
+            for ev in events
+        ],
+        "alerts": [
+            {
+                "id": al.id,
+                "title": al.title,
+                "description": al.description,
+                "severity": al.severity,
+                "risk_score": al.risk_score,
+                "status": al.status,
+                "created_at": al.created_at.isoformat() if al.created_at else None
+            }
+            for al in alerts
+        ]
+    }
+
+@router.get("/me/audit-logs", summary="Get User Data Audit Logs")
+def get_user_audit_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.user_id == current_user.id)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        {
+            "id": l.id,
+            "action": l.action,
+            "source": l.source,
+            "purpose": l.purpose,
+            "timestamp": l.timestamp.isoformat()
+        }
+        for l in logs
+    ]
