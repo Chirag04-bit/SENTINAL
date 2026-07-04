@@ -14,7 +14,7 @@ import { OnboardingWizard } from '../components/widgets/OnboardingWizard';
 import type { DashboardStats, AlertTrendPoint, RiskDistribution, ThreatTypeCount, Alert, User } from '../types';
 
 export default function AdminDashboard() {
-  const { user, login } = useAuth();
+  const { user, login, token } = useAuth();
   const { events: liveEvents, eventsPerMin } = useLiveStream(12);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
       {user && !user.hasCompletedOnboarding && (
         <OnboardingWizard 
           user={user} 
-          onComplete={(updatedUser) => login(updatedUser, localStorage.getItem('token') || '')} 
+          onComplete={(updatedUser) => login(updatedUser, token || '')} 
         />
       )}
       <div className="page-content">

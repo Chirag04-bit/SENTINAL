@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional
@@ -149,7 +149,7 @@ def get_connected_sources(
 
 @router.post("/me/sources", summary="Update Connected Sources")
 def update_connected_sources(
-    updated_sources: dict,
+    updated_sources: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

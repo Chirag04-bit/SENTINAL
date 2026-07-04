@@ -135,6 +135,26 @@ def seed_database(db: Session):
     db.add(admin)
     db_users.append(admin)
 
+    # Standard User
+    standard_user = User(
+        id=str(uuid.uuid4()),
+        name="Standard User",
+        email="user@sentinel.ai",
+        role="user",
+        password_hash=hashed_pwd,
+        is_active=True,
+        risk_score=15,
+        risk_level="low",
+        location="Mumbai, India",
+        device="Chrome / Windows 11",
+        ip_address="192.168.1.2",
+        total_alerts=0,
+        open_alerts=0,
+        joined_at=datetime.now(timezone.utc) - timedelta(days=60)
+    )
+    db.add(standard_user)
+    db_users.append(standard_user)
+
     # Monitored Users from USER_NAMES list
     for i, name in enumerate(USER_NAMES):
         role = "analyst" if i < 2 else "user"

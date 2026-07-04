@@ -12,7 +12,7 @@ import { getMyRiskDetail, getMyActivity } from '../services/userService';
 import type { Alert, RiskScoreData, ActivityItem } from '../types';
 
 export default function UserDashboard() {
-  const { user, login } = useAuth();
+  const { user, login, token } = useAuth();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [risk, setRisk] = useState<RiskScoreData | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -69,7 +69,7 @@ export default function UserDashboard() {
       {user && !user.hasCompletedOnboarding && (
         <OnboardingWizard 
           user={user} 
-          onComplete={(updatedUser) => login(updatedUser, localStorage.getItem('token') || '')} 
+          onComplete={(updatedUser) => login(updatedUser, token || '')} 
         />
       )}
       <div className="page-content">
