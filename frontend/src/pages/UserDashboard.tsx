@@ -81,7 +81,8 @@ export default function UserDashboard() {
       () => {
         setGpsError("Location permission denied or unavailable. Please enable browser location permissions.");
         setGpsLoading(false);
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
