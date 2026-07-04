@@ -19,8 +19,7 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT_MS,
   headers: { 
-    'Content-Type': 'application/json',
-    'bypass-tunnel-reminder': 'true'
+    'Content-Type': 'application/json'
   },
 });
 
