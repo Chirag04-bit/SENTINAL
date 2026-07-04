@@ -38,6 +38,7 @@ def ingest_event(db: Session, user_id: str, event_data: dict) -> tuple[Event, bo
         amount=event_data.get("amount"),
         user_avg_amount=5000.0,  # Phase 6: compute from user history
         user_usual_locations=[user.location] if user and user.location else [],
+        raw_features=event_data,
     )
 
     # Step 2: Store event

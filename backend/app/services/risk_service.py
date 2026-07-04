@@ -44,6 +44,7 @@ def calculate_risk(
     user_usual_locations: list[str] | None = None,
     hour_of_day:   int  | None = None,
     failed_logins_last_hour: int = 0,
+    raw_features:           dict | None = None,
 ) -> RiskResult:
     """
     Rule-based risk scoring engine.
@@ -62,6 +63,7 @@ def calculate_risk(
         user_usual_locations:   List of locations the user normally accesses from
         hour_of_day:            Hour of the event (0–23)
         failed_logins_last_hour: Number of failed logins in the past hour
+        raw_features:           Raw payload features from the ingestion stream
 
     Returns:
         RiskResult with score, level, anomaly flag, XAI factors, and recommendation
@@ -70,9 +72,15 @@ def calculate_risk(
     if settings.USE_ML_MODEL and ml_service.models_loaded:
         try:
             if event_type in ("fraud", "transaction"):
+                combined_feats = {
+                    "ip_address": ip_address, 
+                    "location": location, 
+                    "device": device,
+                    **(raw_features or {})
+                }
                 ml_score, ml_level, ml_factors, ml_rec = ml_service.predict_fraud(
                     amount=amount or 0.0,
-                    raw_features={"ip_address": ip_address, "location": location, "device": device}
+                    raw_features=combined_feats
                 )
                 return RiskResult(
                     score=ml_score,
@@ -82,7 +90,7 @@ def calculate_risk(
                     recommendation=ml_rec
                 )
             elif event_type == "intrusion":
-                raw_feats = {
+                combined_feats = {
                     "ip_address": ip_address,
                     "location": location,
                     "device": device,
@@ -91,9 +99,10 @@ def calculate_risk(
                     "service": "http",
                     "src_bytes": 1200,
                     "dst_bytes": 3400,
-                    "count": 1
+                    "count": 1,
+                    **(raw_features or {})
                 }
-                ml_score, ml_level, ml_factors, ml_rec = ml_service.predict_intrusion(raw_feats)
+                ml_score, ml_level, ml_factors, ml_rec = ml_service.predict_intrusion(combined_feats)
                 return RiskResult(
                     score=ml_score,
                     level=ml_level,
@@ -103,6 +112,8 @@ def calculate_risk(
                 )
         except Exception as e:
             # Fallback to rule-based engine if anything fails
+            import logging
+            logging.getLogger("SENTINEL").warning(f"ML evaluation failed, falling back to rules: {e}")
             pass
 
     score   = 0
