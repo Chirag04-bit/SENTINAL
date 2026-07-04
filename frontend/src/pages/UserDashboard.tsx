@@ -28,18 +28,52 @@ export default function UserDashboard() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const userDevice = user?.device || 'Chrome / Windows 11';
-  const devicesList = [
-    { name: userDevice, icon: userDevice.toLowerCase().includes('phone') || userDevice.toLowerCase().includes('ios') || userDevice.toLowerCase().includes('android') ? '📱' : '💻', last: 'Active Now', trusted: true },
-    ...(userDevice.toLowerCase().includes('iphone') ? [] : [{ name: 'Safari / iPhone 14',  icon: '📱', last: '3 days ago',  trusted: true  }]),
-    ...(userDevice.toLowerCase().includes('android') ? [] : [{ name: 'Unknown Android',     icon: '📱', last: '6 days ago',  trusted: false }]),
-  ];
+  
+  // Dynamically populate devicesList from real activity events
+  const devicesMap = new Map<string, { name: string; icon: string; last: string; trusted: boolean }>();
+  devicesMap.set(userDevice, {
+    name: userDevice,
+    icon: userDevice.toLowerCase().includes('phone') || userDevice.toLowerCase().includes('ios') || userDevice.toLowerCase().includes('android') ? '📱' : '💻',
+    last: 'Active Now',
+    trusted: true
+  });
+  activity.forEach(act => {
+    const parts = act.detail.split(' · ');
+    const dev = parts[0];
+    if (dev && dev !== 'Browser' && !devicesMap.has(dev)) {
+      devicesMap.set(dev, {
+        name: dev,
+        icon: dev.toLowerCase().includes('phone') || dev.toLowerCase().includes('ios') || dev.toLowerCase().includes('android') ? '📱' : '💻',
+        last: new Date(act.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        trusted: act.riskLevel !== 'high' && act.riskLevel !== 'critical'
+      });
+    }
+  });
+  const devicesList = Array.from(devicesMap.values());
 
   const userLoc = user?.location || 'Mumbai, India';
-  const locationsList = [
-    { city: userLoc, flag: userLoc.includes('India') ? '🇮🇳' : userLoc.includes('Indonesia') ? '🇮🇩' : userLoc.includes('Nigeria') ? '🇳🇬' : userLoc.includes('Brazil') ? '🇧🇷' : userLoc.includes('United Kingdom') ? '🇬🇧' : '📍', last: 'Active Now', usual: true },
-    { city: 'Bangalore, India',  flag: '🇮🇳', last: '3 days ago',   usual: true  },
-    { city: 'Lagos, Nigeria',    flag: '🇳🇬', last: '6 days ago',   usual: false },
-  ];
+  
+  // Dynamically populate locationsList from real activity events
+  const locationsMap = new Map<string, { city: string; flag: string; last: string; usual: boolean }>();
+  locationsMap.set(userLoc, {
+    city: userLoc,
+    flag: userLoc.includes('India') ? '🇮🇳' : userLoc.includes('Indonesia') ? '🇮🇩' : userLoc.includes('Nigeria') ? '🇳🇬' : userLoc.includes('Brazil') ? '🇧🇷' : userLoc.includes('United Kingdom') ? '🇬🇧' : '📍',
+    last: 'Active Now',
+    usual: true
+  });
+  activity.forEach(act => {
+    const parts = act.detail.split(' · ');
+    const loc = parts[1];
+    if (loc && loc !== 'Unknown' && !locationsMap.has(loc)) {
+      locationsMap.set(loc, {
+        city: loc,
+        flag: loc.includes('India') ? '🇮🇳' : loc.includes('Indonesia') ? '🇮🇩' : loc.includes('Nigeria') ? '🇳🇬' : loc.includes('Brazil') ? '🇧🇷' : loc.includes('United Kingdom') ? '🇬🇧' : '📍',
+        last: new Date(act.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        usual: act.riskLevel !== 'high' && act.riskLevel !== 'critical'
+      });
+    }
+  });
+  const locationsList = Array.from(locationsMap.values());
 
   useEffect(() => {
     const loadDashboard = async () => {
