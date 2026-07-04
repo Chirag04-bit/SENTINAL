@@ -18,7 +18,10 @@ import { API_BASE_URL, API_TIMEOUT_MS, TOKEN_KEY } from '../utils/constants';
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT_MS,
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 
+    'Content-Type': 'application/json',
+    'bypass-tunnel-reminder': 'true'
+  },
 });
 
 // ─── Request interceptor — attach token ───────────────────────────────────────
